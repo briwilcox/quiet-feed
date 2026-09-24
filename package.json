@@ -1,0 +1,19 @@
+{
+  "name": "quiet-feed",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome extension that filters X timelines with the user's own TypeSafe Jev API key.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/chrome": "0.2.9",
+    "@types/node": "24.13.4",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}

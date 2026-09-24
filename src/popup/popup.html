@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Quiet Feed</title>
+  <link rel="stylesheet" href="../shared/ui.css">
+  <style>body { width: 320px; padding: 12px; }</style>
+</head>
+<body>
+  <h1>Quiet Feed</h1>
+  <div id="setup" class="muted" hidden>Finish setup in <a href="#" class="open-options">settings</a> to start filtering.</div>
+  <label class="row"><strong>Filtering</strong><input type="checkbox" id="enabled"></label>
+
+  <section>
+    <h2>Filters</h2>
+    <label class="row">Rage bait <input type="checkbox" data-filter="rage_bait"></label>
+    <label class="row">LLM slop <input type="checkbox" data-filter="llm_slop"></label>
+    <label class="row"><span>AI video slop <span class="muted">(text and labels only)</span></span><input type="checkbox" data-filter="ai_video_slop"></label>
+    <div id="topics"></div>
+    <label class="row">Sensitivity
+      <select id="sensitivity" style="width:auto">
+        <option value="conservative">Conservative</option>
+        <option value="balanced">Balanced</option>
+        <option value="aggressive">Aggressive</option>
+      </select>
+    </label>
+  </section>
+
+  <section>
+    <h2>Hidden today</h2>
+    <table id="hidden"></table>
+  </section>
+
+  <section>
+    <h2>API</h2>
+    <div id="connection" class="muted"></div>
+    <table id="usage"></table>
+  </section>
+
+  <section><a href="#" class="open-options">Settings, topics, and API key</a></section>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

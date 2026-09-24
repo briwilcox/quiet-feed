@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Quiet Feed settings</title>
+  <link rel="stylesheet" href="../shared/ui.css">
+  <style>body { max-width: 640px; margin: 0 auto; padding: 24px 16px; }</style>
+</head>
+<body>
+  <h1>Quiet Feed settings</h1>
+
+  <section>
+    <h2>What gets sent to TypeSafe</h2>
+    <p>When filtering is on, Quiet Feed sends each post it evaluates on your X home timeline to TypeSafe
+      (api.typesafe.ai) using your API key: the post text, any quoted-post text, image descriptions and labels,
+      whether a video is attached, and the wording of the filters and topics you enabled.</p>
+    <p>It does not send direct messages, drafts, cookies, your account details, or anything else on the page.
+      Decisions are cached on this device for 24 hours as hashes and scores; post text is not stored.</p>
+    <p class="muted">AI video filtering is based on text and labels only. Quiet Feed cannot see video footage.</p>
+    <label class="row"><span>I understand, and want to allow sending post text to TypeSafe</span><input type="checkbox" id="disclosure"></label>
+  </section>
+
+  <section>
+    <h2>API key</h2>
+    <input type="password" id="key" autocomplete="off" spellcheck="false" placeholder="Paste your TypeSafe API key">
+    <label class="row"><span>Session only (re-enter after restarting Chrome)</span><input type="radio" name="mode" value="session"></label>
+    <label class="row"><span>Remember on this device</span><input type="radio" name="mode" value="local"></label>
+    <p class="muted">"Remember" stores the key in this extension's local storage, readable only by the extension's
+      own pages and service worker. It is not encrypted and is never synced or exported.</p>
+    <p><button class="primary" id="save-key">Save and test</button> <button id="test">Test connection</button>
+      <button class="danger" id="delete-key">Delete saved key</button></p>
+    <div id="connection" class="muted"></div>
+  </section>
+
+  <section>
+    <h2>Custom topics</h2>
+    <p class="muted">Each topic is judged separately. Exceptions keep matching posts visible, for example
+      "Hide cryptocurrency price speculation; keep technical blockchain research."</p>
+    <div id="topics"></div>
+    <button id="add-topic">Add topic</button>
+  </section>
+
+  <section>
+    <h2>Always-allowed authors</h2>
+    <table id="authors"></table>
+  </section>
+
+  <section>
+    <h2>Limits and behavior</h2>
+    <label class="row">Daily request limit <input type="number" id="limit" min="0" step="50" style="width:120px"></label>
+    <label class="row"><span>Hide posts briefly while they are being checked</span><input type="checkbox" id="conceal"></label>
+    <p><button id="clear-cache">Clear cached decisions</button></p>
+  </section>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Quiet Feed",
+  "version": "0.1.0",
+  "description": "Filter rage bait, low-substance posts, and topics you choose from your X timeline, using your own TypeSafe API key.",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://api.typesafe.ai/*"
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    {
+      "matches": ["https://x.com/*", "https://twitter.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": { "default_popup": "popup/popup.html", "default_title": "Quiet Feed" },
+  "options_page": "options/options.html"
+}
