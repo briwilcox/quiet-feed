@@ -79,6 +79,15 @@ export interface UsageStats {
   hiddenByRule: Record<string, number>;
 }
 
+/** A hidden post kept in session memory (cleared when the browser closes) for review. */
+export interface BlockedPost {
+  statusId: string;
+  authorHandle: string;
+  snippet: string;
+  labels: string[];
+  at: number;
+}
+
 export type ConnectionStatus =
   | { state: "no_key" }
   | { state: "untested" }
@@ -93,7 +102,14 @@ export type Message =
   | { type: "deleteKey" }
   | { type: "testConnection" }
   | { type: "clearCache" }
-  | { type: "recordResult"; newlyChecked: boolean; newlyBlocked: boolean; ruleIds: string[] }
+  | {
+      type: "recordResult";
+      newlyChecked: boolean;
+      newlyBlocked: boolean;
+      ruleIds: string[];
+      blockedPost?: Omit<BlockedPost, "at">;
+    }
+  | { type: "clearRecentBlocked" }
   | { type: "allowAuthor"; handle: string };
 
 export interface ContentConfig {
@@ -109,4 +125,5 @@ export interface StatusResponse {
   hasKey: boolean;
   connection: ConnectionStatus;
   usage: UsageStats;
+  recentBlocked: BlockedPost[];
 }

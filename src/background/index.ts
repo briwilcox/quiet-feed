@@ -1,5 +1,6 @@
 import { isSettingsChange, loadSettings, saveSettings, todayKey } from "../shared/settings.ts";
 import type {
+  BlockedPost,
   ConnectionStatus,
   ContentConfig,
   Decision,
@@ -50,6 +51,49 @@ function updateUsage(fn: (u: UsageStats) => void): Promise<void> {
   });
   usageChain = next.catch(() => {});
   return next;
+}
+
+// ---- recently blocked (session memory only) + toolbar badge ----
+
+const RECENT_LIMIT = 50;
+const SNIPPET_CHARS = 280;
+
+async function getRecentBlocked(): Promise<BlockedPost[]> {
+  return ((await chrome.storage.session.get("recentBlocked")).recentBlocked as BlockedPost[]) ?? [];
+}
+
+let recentChain: Promise<unknown> = Promise.resolve();
+function addRecentBlocked(p: Omit<BlockedPost, "at">): Promise<void> {
+  // Only accept well-formed ids; they are used to build x.com links in the popup.
+  if (!/^\d{1,25}$/.test(p.statusId) || !/^[A-Za-z0-9_]{1,15}$/.test(p.authorHandle)) return Promise.resolve();
+  const entry: BlockedPost = {
+    statusId: p.statusId,
+    authorHandle: p.authorHandle,
+    snippet: String(p.snippet).slice(0, SNIPPET_CHARS),
+    labels: p.labels.slice(0, 10).map(String),
+    at: Date.now(),
+  };
+  const next = recentChain.then(async () => {
+    const list = (await getRecentBlocked()).filter((b) => b.statusId !== entry.statusId);
+    await chrome.storage.session.set({ recentBlocked: [entry, ...list].slice(0, RECENT_LIMIT) });
+  });
+  recentChain = next.catch(() => {});
+  return next;
+}
+
+function badgeText(n: number): string {
+  if (n <= 0) return "";
+  if (n < 1000) return String(n);
+  return n < 10000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : `${Math.floor(n / 1000)}k`;
+}
+
+async function updateBadge() {
+  const [settings, usage] = await Promise.all([loadSettings(), getUsage()]);
+  const active = settings.enabled && settings.disclosureAccepted;
+  await chrome.action.setBadgeText({ text: active ? badgeText(usage.blocked) : "" });
+  await chrome.action.setTitle({
+    title: active ? `Quiet Feed: ${usage.blocked} blocked of ${usage.checked} checked today` : "Quiet Feed (off)",
+  });
 }
 
 async function getConnection(): Promise<ConnectionStatus> {
@@ -155,12 +199,18 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
     case "getContentConfig":
       return contentConfig();
     case "recordResult":
-      return updateUsage((u) => {
+      await updateUsage((u) => {
         if (msg.newlyChecked) u.checked++;
         if (!msg.newlyBlocked) return;
         u.blocked++;
         for (const id of msg.ruleIds) u.hiddenByRule[id] = (u.hiddenByRule[id] ?? 0) + 1;
       });
+      if (msg.newlyBlocked && msg.blockedPost) await addRecentBlocked(msg.blockedPost);
+      await updateBadge();
+      return null;
+    case "clearRecentBlocked":
+      await chrome.storage.session.remove("recentBlocked");
+      return null;
     case "allowAuthor": {
       const handle = msg.handle.toLowerCase().replace(/^@/, "");
       if (!/^[a-z0-9_]{1,15}$/.test(handle)) throw new Error("Invalid handle");
@@ -169,11 +219,13 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
       return null;
     }
     case "getStatus":
+      void updateBadge();
       return {
         settings: await loadSettings(),
         hasKey: (await getApiKey()) !== null,
         connection: await getConnection(),
         usage: await getUsage(),
+        recentBlocked: await getRecentBlocked(),
       } satisfies StatusResponse;
     case "saveKey":
       await saveApiKey(msg.key, msg.mode);
@@ -204,6 +256,7 @@ chrome.runtime.onMessage.addListener((msg: Message, sender, sendResponse) => {
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== "local" || !isSettingsChange(changes)) return;
   settingsVersion = Date.now();
+  void updateBadge();
   const config = await contentConfig();
   const tabs = await chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] });
   for (const tab of tabs) {
@@ -214,7 +267,11 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 async function init() {
   await restrictStorageAccess();
   await cachePrune();
+  await chrome.action.setBadgeBackgroundColor({ color: "#536471" });
+  await updateBadge();
 }
+// The daily count resets at midnight UTC; refresh the badge so it doesn't show yesterday's number.
+setInterval(() => void updateBadge(), 60_000);
 chrome.runtime.onInstalled.addListener(() => void init());
 chrome.runtime.onStartup.addListener(() => void init());
 void init();

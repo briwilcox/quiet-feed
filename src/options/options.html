@@ -15,7 +15,9 @@
       (api.typesafe.ai) using your API key: the post text, any quoted-post text, image descriptions and labels,
       whether a video is attached, and the wording of the filters and topics you enabled.</p>
     <p>It does not send direct messages, drafts, cookies, your account details, or anything else on the page.
-      Decisions are cached on this device for 24 hours as hashes and scores; post text is not stored.</p>
+      Decisions are cached on this device for 24 hours as hashes and scores; post text is not stored in that cache.
+      The last 50 hidden posts (author, first 280 characters, reason) are kept in memory so you can review them
+      in the popup; that list is erased when the browser closes.</p>
     <p class="muted">AI video filtering is based on text and labels only. Quiet Feed cannot see video footage.</p>
     <label class="row"><span>I understand, and want to allow sending post text to TypeSafe</span><input type="checkbox" id="disclosure"></label>
   </section>

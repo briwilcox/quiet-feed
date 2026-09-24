@@ -1,5 +1,5 @@
 import { FILTER_LABELS, saveSettings } from "../shared/settings.ts";
-import type { BuiltInFilterId, Message, Sensitivity, StatusResponse } from "../shared/types.ts";
+import type { BlockedPost, BuiltInFilterId, Message, Sensitivity, StatusResponse } from "../shared/types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -24,7 +24,7 @@ function rows(table: HTMLTableElement, data: Array<[string, string | number]>) {
 }
 
 async function render() {
-  const { settings, hasKey, connection, usage } = await send<StatusResponse>({ type: "getStatus" });
+  const { settings, hasKey, connection, usage, recentBlocked } = await send<StatusResponse>({ type: "getStatus" });
   const ready = hasKey && settings.disclosureAccepted;
 
   $("#setup").hidden = ready;
@@ -72,6 +72,8 @@ async function render() {
     hidden.length ? hidden.map(([id, n]) => [labelFor(id), n]) : [["Nothing hidden yet", ""]],
   );
 
+  renderRecent(recentBlocked);
+
   const conn = $("#connection");
   conn.className =
     connection.state === "ok" ? "ok" : connection.state === "error" ? "err" : "muted";
@@ -90,6 +92,40 @@ async function render() {
     ["Last latency", usage.lastLatencyMs === null ? "n/a" : `${usage.lastLatencyMs} ms`],
   ]);
 }
+
+function renderRecent(list: BlockedPost[]) {
+  $("#clear-recent").hidden = list.length === 0;
+  if (list.length === 0) {
+    $("#recent").innerHTML = '<p class="muted">Nothing blocked since the browser opened.</p>';
+    return;
+  }
+  const ul = document.createElement("ul");
+  ul.className = "recent";
+  for (const b of list) {
+    const li = document.createElement("li");
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    const who = document.createElement("span");
+    who.textContent = `@${b.authorHandle} · ${b.labels.join(", ")}`;
+    const open = document.createElement("a");
+    open.href = `https://x.com/${encodeURIComponent(b.authorHandle)}/status/${encodeURIComponent(b.statusId)}`;
+    open.target = "_blank";
+    open.rel = "noopener";
+    open.textContent = "Open";
+    meta.append(who, open);
+    const snippet = document.createElement("div");
+    snippet.className = "snippet";
+    snippet.textContent = b.snippet || "(no text)";
+    li.append(meta, snippet);
+    ul.append(li);
+  }
+  $("#recent").replaceChildren(ul);
+}
+
+$("#clear-recent").addEventListener("click", async () => {
+  await send({ type: "clearRecentBlocked" });
+  void render();
+});
 
 document.querySelectorAll(".open-options").forEach((a) =>
   a.addEventListener("click", (e) => {

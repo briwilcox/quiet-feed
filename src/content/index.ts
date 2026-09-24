@@ -1,4 +1,4 @@
-import type { ContentConfig, Decision, Message } from "../shared/types.ts";
+import type { BlockedPost, ContentConfig, Decision, Message } from "../shared/types.ts";
 import { extractPost, isSupportedPage, SEL, signature } from "./extract.ts";
 
 const ATTR_SIG = "data-qf-sig";
@@ -11,13 +11,19 @@ const concealTimers = new WeakMap<Element, number>();
 /** Per-page tally so re-evaluating a post (scrolling back, settings change) doesn't recount it. */
 const tallied = new Map<string, "checked" | "blocked">();
 
-function tally(statusId: string, blocked: boolean, ruleIds: string[]) {
+function tally(statusId: string, blocked: boolean, ruleIds: string[], blockedPost?: Omit<BlockedPost, "at">) {
   const prev = tallied.get(statusId);
   const newlyChecked = prev === undefined;
   const newlyBlocked = blocked && prev !== "blocked";
   if (!newlyChecked && !newlyBlocked) return;
   tallied.set(statusId, blocked ? "blocked" : prev ?? "checked");
-  void send({ type: "recordResult", newlyChecked, newlyBlocked, ruleIds }).catch(() => {});
+  void send({
+    type: "recordResult",
+    newlyChecked,
+    newlyBlocked,
+    ruleIds,
+    ...(newlyBlocked && blockedPost && { blockedPost }),
+  }).catch(() => {});
 }
 
 async function send<T>(msg: Message): Promise<T> {
@@ -125,7 +131,12 @@ async function evaluate(article: HTMLElement) {
   const blocked = decision.hide && !revealed.has(post.statusId);
   // Only real verdicts count as checked; errors, limits, and skips do not.
   if (decision.reason === "hidden" || decision.reason === "below_threshold") {
-    tally(post.statusId, blocked, decision.matched.map((m) => m.ruleId));
+    tally(post.statusId, blocked, decision.matched.map((m) => m.ruleId), {
+      statusId: post.statusId,
+      authorHandle: post.authorHandle,
+      snippet: post.text || post.quotedText || post.mediaLabels.join(", "),
+      labels: decision.matched.map((m) => m.label),
+    });
   }
   if (blocked) hide(article, post.statusId, post.authorHandle, decision);
   else unconceal(article);
