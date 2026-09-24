@@ -29,7 +29,9 @@ npm install
 npm run build
 ```
 
-Then open `chrome://extensions`, turn on Developer mode, choose **Load unpacked**, and select `dist/`. Use `npm run watch` to rebuild on change.
+If `npm install` is unavailable, `npm run build:nodeps` builds `dist/` with Node's built-in type stripping and no packages.
+
+Then open `chrome://extensions` (or `brave://extensions` in Brave), turn on Developer mode, choose **Load unpacked**, and select `dist/`. Use `npm run watch` to rebuild on change.
 
 ```bash
 npm test
