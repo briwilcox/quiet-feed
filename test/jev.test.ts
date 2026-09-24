@@ -25,8 +25,8 @@ const settings: Settings = {
 
 test("one Noul question per enabled rule; video filter only with video", () => {
   const { body, rules } = buildRequest(post, settings);
-  assert.deepEqual(Object.keys(body.questions), ["rage_bait", "topic:t1"]);
-  assert.deepEqual(rules.map((r) => r.ruleId), ["rage_bait", "topic:t1"]);
+  assert.deepEqual(Object.keys(body.questions), ["rage_bait", "rage_bait_quoted", "topic:t1"]);
+  assert.deepEqual(rules.map((r) => r.ruleId), ["rage_bait", "rage_bait_quoted", "topic:t1"]);
   for (const q of Object.values(body.questions)) assert.equal(q.type, "noul");
 
   const withVideo = buildRequest({ ...post, hasVideo: true }, settings);
@@ -68,4 +68,16 @@ test("callJev retries 429 then succeeds, and does not retry 401", async () => {
   const denied = async () => (calls++, new Response("", { status: 401 }));
   await assert.rejects(callJev("k", body, { baseDelayMs: 1, fetchImpl: denied as typeof fetch }), /HTTP 401/);
   assert.equal(calls, 1);
+});
+
+test("quoted rage bait is judged on its own, only when a quote exists", () => {
+  const { body } = buildRequest(post, settings);
+  const q = JSON.stringify(body.questions.rage_bait_quoted);
+  assert.match(q, /regardless of whether `post.text` agrees with it/);
+  assert.ok(!JSON.stringify(body.questions.rage_bait).includes("quoted_post` being provocative"));
+
+  assert.ok(!("rage_bait_quoted" in buildRequest({ ...post, quotedText: null }, settings).body.questions));
+  assert.ok(!("rage_bait_quoted" in buildRequest({ ...post, quotedText: "  " }, settings).body.questions));
+  const off = { ...settings, filters: { ...settings.filters, rage_bait: false } };
+  assert.ok(!("rage_bait_quoted" in buildRequest(post, off).body.questions));
 });

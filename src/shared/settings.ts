@@ -6,6 +6,12 @@ export const FILTER_LABELS: Record<BuiltInFilterId, string> = {
   ai_video_slop: "AI video slop",
 };
 
+/** Labels for every rule id the classifier can report, built-in or derived. */
+export const RULE_LABELS: Record<string, string> = {
+  ...FILTER_LABELS,
+  rage_bait_quoted: "Rage bait (quoted post)",
+};
+
 export const SENSITIVITY_LABELS: Record<Sensitivity, string> = {
   conservative: "Conservative",
   balanced: "Balanced",

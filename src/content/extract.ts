@@ -10,6 +10,7 @@ export const SEL = {
   video: '[data-testid="videoPlayer"], [data-testid="videoComponent"]',
   photo: '[data-testid="tweetPhoto"] img[alt]',
   permalink: 'a[href*="/status/"]:has(time)',
+  userName: '[data-testid="User-Name"]',
 };
 
 /** Timelines the first release filters: For You and Following both live at /home. */
@@ -22,7 +23,9 @@ export function extractPost(article: Element): PostPayload | null {
   const m = link?.getAttribute("href")?.match(/^\/([A-Za-z0-9_]{1,15})\/status\/(\d+)/);
   if (!m) return null;
 
-  const quote = article.querySelector(SEL.quote);
+  const quote =
+    [...article.querySelectorAll(SEL.quote)].find((el) => el.querySelector(SEL.text) || el.querySelector(SEL.userName)) ??
+    null;
   const inQuote = (el: Element) => quote !== null && quote.contains(el);
   const texts = [...article.querySelectorAll(SEL.text)];
   const own = texts.find((t) => !inQuote(t));

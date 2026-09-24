@@ -1,4 +1,4 @@
-import { FILTER_LABELS, saveSettings } from "../shared/settings.ts";
+import { RULE_LABELS, saveSettings } from "../shared/settings.ts";
 import type { BlockedPost, BuiltInFilterId, Message, Sensitivity, StatusResponse } from "../shared/types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
@@ -59,20 +59,22 @@ async function render() {
   sens.onchange = () => saveSettings({ sensitivity: sens.value as Sensitivity });
 
   const labelFor = (ruleId: string) =>
-    FILTER_LABELS[ruleId as BuiltInFilterId] ??
+    RULE_LABELS[ruleId] ??
     settings.topics.find((t) => `topic:${t.id}` === ruleId)?.name ??
     "Removed topic";
-  $("#blocked").textContent = usage.blocked.toLocaleString();
-  $("#checked").textContent = usage.checked.toLocaleString();
-  $("#rate").textContent = usage.checked ? `(${((usage.blocked / usage.checked) * 100).toFixed(1)}%)` : "";
+  const blocked = usage.blocked ?? 0;
+  const checked = usage.checked ?? 0;
+  $("#blocked").textContent = blocked.toLocaleString();
+  $("#checked").textContent = checked.toLocaleString();
+  $("#rate").textContent = checked ? `(${((blocked / checked) * 100).toFixed(1)}%)` : "";
 
-  const hidden = Object.entries(usage.hiddenByRule);
+  const hidden = Object.entries(usage.hiddenByRule ?? {});
   rows(
     $("#hidden"),
     hidden.length ? hidden.map(([id, n]) => [labelFor(id), n]) : [["Nothing hidden yet", ""]],
   );
 
-  renderRecent(recentBlocked);
+  renderRecent(recentBlocked ?? []);
 
   const conn = $("#connection");
   conn.className =
@@ -133,5 +135,17 @@ document.querySelectorAll(".open-options").forEach((a) =>
     void chrome.runtime.openOptionsPage();
   }),
 );
-chrome.storage.onChanged.addListener(() => void render());
-void render();
+function renderSafely() {
+  render().then(
+    () => ($("#error").hidden = true),
+    (err: unknown) => {
+      // Usually means the popup (read fresh from disk) is newer than the running service worker.
+      const el = $("#error");
+      el.hidden = false;
+      el.textContent = `Couldn't load status (${err instanceof Error ? err.message : String(err)}). If you just rebuilt, click reload on the extension, then reload your X tabs.`;
+    },
+  );
+}
+
+chrome.storage.onChanged.addListener(() => renderSafely());
+renderSafely();
