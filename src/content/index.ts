@@ -8,6 +8,17 @@ let config: ContentConfig | null = null;
 /** Posts the user chose to show this page session, by status id. */
 const revealed = new Set<string>();
 const concealTimers = new WeakMap<Element, number>();
+/** Per-page tally so re-evaluating a post (scrolling back, settings change) doesn't recount it. */
+const tallied = new Map<string, "checked" | "blocked">();
+
+function tally(statusId: string, blocked: boolean, ruleIds: string[]) {
+  const prev = tallied.get(statusId);
+  const newlyChecked = prev === undefined;
+  const newlyBlocked = blocked && prev !== "blocked";
+  if (!newlyChecked && !newlyBlocked) return;
+  tallied.set(statusId, blocked ? "blocked" : prev ?? "checked");
+  void send({ type: "recordResult", newlyChecked, newlyBlocked, ruleIds }).catch(() => {});
+}
 
 async function send<T>(msg: Message): Promise<T> {
   const res = await chrome.runtime.sendMessage(msg);
@@ -65,7 +76,6 @@ function hide(article: HTMLElement, statusId: string, author: string, decision: 
   article.before(ph);
   article.style.setProperty("display", "none");
   unconceal(article);
-  void send({ type: "recordHidden", ruleIds: decision.matched.map((m) => m.ruleId) }).catch(() => {});
 }
 
 function linkButton(text: string, onClick: () => void): HTMLButtonElement {
@@ -112,7 +122,12 @@ async function evaluate(article: HTMLElement) {
     unconceal(article);
     return;
   }
-  if (decision.hide && !revealed.has(post.statusId)) hide(article, post.statusId, post.authorHandle, decision);
+  const blocked = decision.hide && !revealed.has(post.statusId);
+  // Only real verdicts count as checked; errors, limits, and skips do not.
+  if (decision.reason === "hidden" || decision.reason === "below_threshold") {
+    tally(post.statusId, blocked, decision.matched.map((m) => m.ruleId));
+  }
+  if (blocked) hide(article, post.statusId, post.authorHandle, decision);
   else unconceal(article);
 }
 

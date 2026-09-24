@@ -26,4 +26,6 @@ input[type=text], input[type=password], input[type=number], textarea, select {
   font: inherit; color: var(--fg); background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%;
 }
 table { width: 100%; border-collapse: collapse; } td { padding: 2px 0; } td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.stat { font-size: 15px; margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+.stat strong { font-size: 20px; }
 .topic { border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 8px 0; display: grid; gap: 6px; }

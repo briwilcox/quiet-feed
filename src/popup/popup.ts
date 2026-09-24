@@ -62,6 +62,10 @@ async function render() {
     FILTER_LABELS[ruleId as BuiltInFilterId] ??
     settings.topics.find((t) => `topic:${t.id}` === ruleId)?.name ??
     "Removed topic";
+  $("#blocked").textContent = usage.blocked.toLocaleString();
+  $("#checked").textContent = usage.checked.toLocaleString();
+  $("#rate").textContent = usage.checked ? `(${((usage.blocked / usage.checked) * 100).toFixed(1)}%)` : "";
+
   const hidden = Object.entries(usage.hiddenByRule);
   rows(
     $("#hidden"),

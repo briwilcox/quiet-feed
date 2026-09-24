@@ -72,6 +72,10 @@ export interface UsageStats {
   errors: number;
   lastLatencyMs: number | null;
   lastModel: string | null;
+  /** Distinct posts that got a verdict (API or cache), counted once per post per page load. */
+  checked: number;
+  /** Distinct posts hidden, counted once per post per page load. */
+  blocked: number;
   hiddenByRule: Record<string, number>;
 }
 
@@ -89,7 +93,7 @@ export type Message =
   | { type: "deleteKey" }
   | { type: "testConnection" }
   | { type: "clearCache" }
-  | { type: "recordHidden"; ruleIds: string[] }
+  | { type: "recordResult"; newlyChecked: boolean; newlyBlocked: boolean; ruleIds: string[] }
   | { type: "allowAuthor"; handle: string };
 
 export interface ContentConfig {

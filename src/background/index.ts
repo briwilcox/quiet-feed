@@ -29,13 +29,15 @@ function emptyUsage(): UsageStats {
     errors: 0,
     lastLatencyMs: null,
     lastModel: null,
+    checked: 0,
+    blocked: 0,
     hiddenByRule: {},
   };
 }
 
 async function getUsage(): Promise<UsageStats> {
   const u = (await chrome.storage.local.get("usage")).usage as UsageStats | undefined;
-  return u && u.day === todayKey() ? u : emptyUsage();
+  return u && u.day === todayKey() ? { ...emptyUsage(), ...u } : emptyUsage();
 }
 
 // Serialize read-modify-write so concurrent requests don't drop increments.
@@ -140,7 +142,7 @@ async function contentConfig(): Promise<ContentConfig> {
 
 // ---- messaging ----
 
-const CONTENT_MESSAGES = new Set<Message["type"]>(["classify", "getContentConfig", "recordHidden", "allowAuthor"]);
+const CONTENT_MESSAGES = new Set<Message["type"]>(["classify", "getContentConfig", "recordResult", "allowAuthor"]);
 
 async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promise<unknown> {
   // Content scripts run inside x.com; they may only classify and read their own config.
@@ -152,8 +154,11 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
       return classify(msg.post);
     case "getContentConfig":
       return contentConfig();
-    case "recordHidden":
+    case "recordResult":
       return updateUsage((u) => {
+        if (msg.newlyChecked) u.checked++;
+        if (!msg.newlyBlocked) return;
+        u.blocked++;
         for (const id of msg.ruleIds) u.hiddenByRule[id] = (u.hiddenByRule[id] ?? 0) + 1;
       });
     case "allowAuthor": {
