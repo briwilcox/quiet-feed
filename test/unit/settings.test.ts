@@ -17,15 +17,20 @@ test("defaults are safe: off until the user opts in, session-only key", () => {
   assert.equal(DEFAULT_SETTINGS.disclosureAccepted, false);
   assert.equal(DEFAULT_SETTINGS.keyStorageMode, "session");
   assert.equal(DEFAULT_SETTINGS.concealWhilePending, false);
+  assert.equal(DEFAULT_SETTINGS.backend, "gliner");
+  assert.equal(DEFAULT_SETTINGS.hideProviderRefusals, true);
   assert.ok(DEFAULT_SETTINGS.dailyRequestLimit > 0);
 });
 
 test("stricter sensitivity never has a lower threshold than a looser one", () => {
-  for (const rule of Object.keys(THRESHOLDS.balanced) as Array<keyof typeof THRESHOLDS.balanced>) {
-    assert.ok(THRESHOLDS.conservative[rule] > THRESHOLDS.balanced[rule], rule);
-    assert.ok(THRESHOLDS.balanced[rule] > THRESHOLDS.aggressive[rule], rule);
-    for (const s of ["conservative", "balanced", "aggressive"] as const) {
-      assert.ok(THRESHOLDS[s][rule] > 0.5 && THRESHOLDS[s][rule] < 1, `${s}.${rule}`);
+  for (const backend of ["jev", "gliner"] as const) {
+    const t = THRESHOLDS[backend];
+    for (const rule of Object.keys(t.balanced) as Array<keyof typeof t.balanced>) {
+      assert.ok(t.conservative[rule] > t.balanced[rule], `${backend}.${rule}`);
+      assert.ok(t.balanced[rule] > t.aggressive[rule], `${backend}.${rule}`);
+      for (const s of ["conservative", "balanced", "aggressive"] as const) {
+        assert.ok(t[s][rule] >= 0.5 && t[s][rule] < 1, `${backend}.${s}.${rule}`);
+      }
     }
   }
 });
@@ -33,6 +38,7 @@ test("stricter sensitivity never has a lower threshold than a looser one", () =>
 test("every built-in filter and derived rule has a label", () => {
   for (const id of Object.keys(FILTER_LABELS)) assert.equal(RULE_LABELS[id], FILTER_LABELS[id as keyof typeof FILTER_LABELS]);
   assert.equal(RULE_LABELS.rage_bait_quoted, "Rage bait (quoted post)");
+  assert.equal(RULE_LABELS.provider_refused, "Refused by Fastino");
 });
 
 test("loadSettings fills defaults under stored values; saveSettings merges a patch", async () => {

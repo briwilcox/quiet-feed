@@ -1,9 +1,10 @@
-import type { JevRequest } from "./jev.ts";
 
 /** Cached raw judgments. Only a hash of the post is kept, never its text. */
 export interface CacheEntry {
   probabilities: Record<string, number>;
   model: string;
+  /** The provider refused the post; see applyRefusal. */
+  refused?: boolean;
   expiresAt: number;
 }
 
@@ -14,8 +15,8 @@ export const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
  * Keyed by post content, question definitions, prompt version, and model.
  * Thresholds are applied after lookup, so a sensitivity change reuses entries.
  */
-export async function cacheKey(body: JevRequest, promptVersion: string): Promise<string> {
-  const material = JSON.stringify([promptVersion, body.model, body.state, body.questions]);
+export async function cacheKey(body: unknown, promptVersion: string): Promise<string> {
+  const material = JSON.stringify([promptVersion, body]);
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(material));
   return (
     PREFIX +

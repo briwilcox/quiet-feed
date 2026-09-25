@@ -1,22 +1,33 @@
 import { isSettingsChange, loadSettings, saveSettings, todayKey } from "../shared/settings.ts";
 import type {
+  Backend,
   BlockedPost,
   ConnectionStatus,
   ContentConfig,
   Decision,
   Message,
   PostPayload,
+  Settings,
   StatusResponse,
   UsageStats,
 } from "../shared/types.ts";
 import { badgeText } from "./badge.ts";
 import { cacheGet, cacheKey, cachePrune, cachePut } from "./cache.ts";
-import { decide, preDecide, visible } from "./decide.ts";
+import { applyRefusal, decide, preDecide, visible } from "./decide.ts";
+import { buildGlinerRequest, callGliner, GLINER_MODEL, GLINER_PROMPT_VERSION, GlinerError } from "./gliner.ts";
 import { deleteApiKey, getApiKey, restrictStorageAccess, saveApiKey } from "./keystore.ts";
-import { buildRequest, callJev, JEV_MODEL, JevError, PROMPT_VERSION, type JevResponse } from "./jev.ts";
+import { buildRequest, callJev, JEV_MODEL, JevError, PROMPT_VERSION, type RuleMeta } from "./jev.ts";
 import { RequestQueue } from "./queue.ts";
 
-const queue = new RequestQueue<JevResponse>(2, 50);
+/** What every backend returns: scores per rule, plus whether the provider refused the post. */
+interface ClassifierResult {
+  model: string;
+  probabilities: Record<string, number>;
+  refused: boolean;
+  usage: { input_tokens: number; output_tokens: number };
+}
+
+const queue = new RequestQueue<ClassifierResult>(2, 50);
 let settingsVersion = Date.now();
 
 // ---- usage + connection state (trusted storage) ----
@@ -33,6 +44,7 @@ function emptyUsage(): UsageStats {
     lastModel: null,
     checked: 0,
     blocked: 0,
+    refused: 0,
     hiddenByRule: {},
   };
 }
@@ -91,80 +103,128 @@ async function updateBadge() {
   });
 }
 
-async function getConnection(): Promise<ConnectionStatus> {
-  if (!(await getApiKey())) return { state: "no_key" };
-  return ((await chrome.storage.session.get("connection")).connection as ConnectionStatus) ?? { state: "untested" };
+const connectionKey = (provider: Backend) => `connection:${provider}`;
+
+async function getConnection(provider: Backend): Promise<ConnectionStatus> {
+  if (!(await getApiKey(provider))) return { state: "no_key" };
+  const key = connectionKey(provider);
+  return ((await chrome.storage.session.get(key))[key] as ConnectionStatus) ?? { state: "untested" };
 }
 
 // ---- classification ----
 
+interface Prepared {
+  rules: RuleMeta[];
+  /** Everything that determines the model's answers; hashed for the cache key. */
+  body: unknown;
+  promptVersion: string;
+  /** API calls one classification makes; counted against the daily limit. */
+  calls: number;
+  run: (apiKey: string) => Promise<ClassifierResult>;
+}
+
+function prepare(post: PostPayload, settings: Settings): Prepared {
+  if (settings.backend === "jev") {
+    const { body, rules } = buildRequest(post, settings);
+    return {
+      rules,
+      body,
+      promptVersion: PROMPT_VERSION,
+      calls: 1,
+      run: async (apiKey) => {
+        const r = await callJev(apiKey, body);
+        const probabilities = Object.fromEntries(Object.entries(r.answers).map(([id, a]) => [id, a.noul as number]));
+        return { model: r.model, probabilities, refused: false, usage: r.usage };
+      },
+    };
+  }
+  const { body, rules } = buildGlinerRequest(post, settings);
+  return {
+    rules,
+    body,
+    promptVersion: GLINER_PROMPT_VERSION,
+    calls: body.items.length,
+    run: (apiKey) => callGliner(apiKey, body),
+  };
+}
+
 async function classify(post: PostPayload): Promise<Decision> {
   const settings = await loadSettings();
-  const { body, rules } = buildRequest(post, settings);
-  const early = preDecide(post, settings, rules.length > 0);
+  const prepared = prepare(post, settings);
+  const early = preDecide(post, settings, prepared.rules.length > 0);
   if (early) return early;
 
-  const key = await cacheKey(body, PROMPT_VERSION);
+  const key = await cacheKey(prepared.body, prepared.promptVersion);
   const cached = await cacheGet(key);
   if (cached) {
     await updateUsage((u) => void u.cacheHits++);
-    return decide(rules, cached.probabilities, settings);
+    return applyRefusal(decide(prepared.rules, cached.probabilities, settings), cached.refused === true, settings);
   }
 
-  const apiKey = await getApiKey();
+  const apiKey = await getApiKey(settings.backend);
   if (!apiKey) return visible("no_key");
   const usage = await getUsage();
-  if (usage.requests >= settings.dailyRequestLimit) return visible("daily_limit", "Daily request limit reached.");
+  if (usage.requests + prepared.calls > settings.dailyRequestLimit) return visible("daily_limit", "Daily request limit reached.");
 
   try {
     const res = await queue.run(key, async () => {
-      await updateUsage((u) => void u.requests++);
+      await updateUsage((u) => void (u.requests += prepared.calls));
       const started = performance.now();
-      const r = await callJev(apiKey, body);
+      const r = await prepared.run(apiKey);
       const latency = Math.round(performance.now() - started);
       await updateUsage((u) => {
         u.inputTokens += r.usage.input_tokens;
         u.outputTokens += r.usage.output_tokens;
         u.lastLatencyMs = latency;
         u.lastModel = r.model;
+        if (r.refused) u.refused++;
       });
       return r;
     });
-    const probabilities = Object.fromEntries(
-      Object.entries(res.answers).map(([id, a]) => [id, a.noul as number]),
-    );
-    await cachePut(key, { probabilities, model: res.model });
-    return decide(rules, probabilities, settings);
+    await cachePut(key, { probabilities: res.probabilities, model: res.model, refused: res.refused });
+    return applyRefusal(decide(prepared.rules, res.probabilities, settings), res.refused, settings);
   } catch (err) {
     // Any failure leaves the post visible.
     await updateUsage((u) => void u.errors++);
-    return visible("api_error", err instanceof JevError ? err.message : "Classification failed");
+    const message = err instanceof JevError || err instanceof GlinerError ? err.message : "Classification failed";
+    return visible("api_error", message);
   }
 }
 
-async function testConnection(): Promise<ConnectionStatus> {
-  const apiKey = await getApiKey();
+async function testConnection(provider: Backend): Promise<ConnectionStatus> {
+  const apiKey = await getApiKey(provider);
   if (!apiKey) return { state: "no_key" };
   let status: ConnectionStatus;
   try {
-    const r = await callJev(
-      apiKey,
-      {
-        model: JEV_MODEL,
-        state: "Connection test.",
-        questions: { ping: { type: "noul", instructions: { question: "Is this text a connection test?" }, criteria: { true: "Yes", false: "No" } } },
-      },
-      { maxAttempts: 1 }, // mutation-ignore: 0 and 1 behave identically (one attempt)
-    );
-    status = { state: "ok", model: r.model, checkedAt: Date.now() };
+    const model =
+      provider === "jev"
+        ? (
+            await callJev(
+              apiKey,
+              {
+                model: JEV_MODEL,
+                state: "Connection test.",
+                questions: { ping: { type: "noul", instructions: { question: "Is this text a connection test?" }, criteria: { true: "Yes", false: "No" } } },
+              },
+              { maxAttempts: 1 }, // mutation-ignore: 0 and 1 behave identically (one attempt)
+            )
+          ).model
+        : (
+            await callGliner(
+              apiKey,
+              { model: GLINER_MODEL, items: [{ ruleId: "ping", text: "Connection test.", head: { task: "connection test", positive: "yes", negatives: ["no"] } }] },
+              { maxAttempts: 1 }, // mutation-ignore: 0 and 1 behave identically (one attempt)
+            )
+          ).model;
+    status = { state: "ok", model, checkedAt: Date.now() };
   } catch (err) {
     status = {
       state: "error",
-      message: err instanceof JevError ? err.message : "Unknown error",
+      message: err instanceof JevError || err instanceof GlinerError ? err.message : "Unknown error",
       checkedAt: Date.now(),
     };
   }
-  await chrome.storage.session.set({ connection: status });
+  await chrome.storage.session.set({ [connectionKey(provider)]: status });
   return status;
 }
 
@@ -187,6 +247,7 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
   // Content scripts run inside x.com; they may only classify and read their own config.
   const fromExtensionPage = sender.url?.startsWith(chrome.runtime.getURL("")) ?? false;
   if (!fromExtensionPage && !CONTENT_MESSAGES.has(msg.type)) throw new Error("Not allowed");
+  if ("provider" in msg && msg.provider !== "jev" && msg.provider !== "gliner") throw new Error("Unknown provider");
 
   switch (msg.type) {
     case "classify":
@@ -213,25 +274,34 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
       if (!allowedAuthors.includes(handle)) await saveSettings({ allowedAuthors: [...allowedAuthors, handle] });
       return null;
     }
-    case "getStatus":
+    case "getStatus": {
       void updateBadge();
+      const settings = await loadSettings();
+      const keys = {
+        jev: (await getApiKey("jev")) !== null,
+        gliner: (await getApiKey("gliner")) !== null,
+      };
+      const connections = { jev: await getConnection("jev"), gliner: await getConnection("gliner") };
       return {
-        settings: await loadSettings(),
-        hasKey: (await getApiKey()) !== null,
-        connection: await getConnection(),
+        settings,
+        keys,
+        hasKey: keys[settings.backend],
+        connection: connections[settings.backend],
+        connections,
         usage: await getUsage(),
         recentBlocked: await getRecentBlocked(),
       } satisfies StatusResponse;
+    }
     case "saveKey":
-      await saveApiKey(msg.key, msg.mode);
-      await chrome.storage.session.remove("connection");
-      return testConnection();
+      await saveApiKey(msg.provider, msg.key, msg.mode);
+      await chrome.storage.session.remove(connectionKey(msg.provider));
+      return testConnection(msg.provider);
     case "deleteKey":
-      await deleteApiKey();
-      await chrome.storage.session.remove("connection");
+      await deleteApiKey(msg.provider);
+      await chrome.storage.session.remove(connectionKey(msg.provider));
       return null;
     case "testConnection":
-      return testConnection();
+      return testConnection(msg.provider);
     case "clearCache":
       await cachePrune({ all: true });
       return null;

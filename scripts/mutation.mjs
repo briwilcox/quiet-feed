@@ -19,6 +19,7 @@ const DEFAULT_TARGETS = [
   "src/background/badge.ts",
   "src/background/cache.ts",
   "src/background/decide.ts",
+  "src/background/gliner.ts",
   "src/background/index.ts",
   "src/background/jev.ts",
   "src/background/keystore.ts",

@@ -1,6 +1,6 @@
-import { RULE_LABELS, saveSettings } from "../shared/settings.ts";
+import { BACKEND_LABELS, RULE_LABELS, saveSettings } from "../shared/settings.ts";
 import { RevealState, loadHiddenPref, saveHiddenPref } from "./reveal.ts";
-import type { BlockedPost, BuiltInFilterId, Message, Sensitivity, StatusResponse } from "../shared/types.ts";
+import type { Backend, BlockedPost, BuiltInFilterId, Message, Sensitivity, StatusResponse } from "../shared/types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -37,6 +37,8 @@ async function render() {
   document.querySelectorAll<HTMLInputElement>("[data-filter]").forEach((box) => {
     const id = box.dataset.filter as BuiltInFilterId;
     box.checked = settings.filters[id];
+    // GLiNER has no usable slop judgment; the setting is kept for when Jev is selected.
+    box.disabled = id === "llm_slop" && settings.backend === "gliner";
     box.onchange = () => saveSettings({ filters: { ...settings.filters, [id]: box.checked } });
   });
 
@@ -54,6 +56,12 @@ async function render() {
       return label;
     }),
   );
+
+  $("#slop-note").hidden = settings.backend !== "gliner";
+
+  const backend = $<HTMLSelectElement>("#backend");
+  backend.value = settings.backend;
+  backend.onchange = () => saveSettings({ backend: backend.value as Backend });
 
   const sens = $<HTMLSelectElement>("#sensitivity");
   sens.value = settings.sensitivity;
@@ -81,7 +89,7 @@ async function render() {
   conn.className =
     connection.state === "ok" ? "ok" : connection.state === "error" ? "err" : "muted";
   conn.textContent = {
-    no_key: "No API key saved",
+    no_key: `No ${BACKEND_LABELS[settings.backend]} API key saved`,
     untested: "Key saved, not tested",
     ok: connection.state === "ok" ? `Connected (${connection.model})` : "",
     error: connection.state === "error" ? `Error: ${connection.message}` : "",
@@ -92,6 +100,7 @@ async function render() {
     ["Cache hits", usage.cacheHits],
     ["Tokens in / out", `${usage.inputTokens} / ${usage.outputTokens}`],
     ["Errors", usage.errors],
+    ["Refused by provider", usage.refused ?? 0],
     ["Last latency", usage.lastLatencyMs === null ? "n/a" : `${usage.lastLatencyMs} ms`],
   ]);
 }

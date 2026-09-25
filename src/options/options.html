@@ -10,28 +10,50 @@
   <h1>Quiet Feed settings</h1>
 
   <section>
-    <h2>What gets sent to TypeSafe</h2>
-    <p>When filtering is on, Quiet Feed sends each post it evaluates on your X home timeline to TypeSafe
-      (api.typesafe.ai) using your API key: the post text, any quoted-post text, image descriptions and labels,
-      whether a video is attached, and the wording of the filters and topics you enabled.</p>
+    <h2>Model</h2>
+    <label class="row"><span><strong>GLiNER2.5</strong> by Fastino <span class="muted">(default)</span></span><input type="radio" name="backend" value="gliner"></label>
+    <label class="row"><span><strong>Jev</strong> by TypeSafe</span><input type="radio" name="backend" value="jev"></label>
+    <p class="muted">Both run in the provider's cloud with your own API key. GLiNER is fast and good at rage bait and
+      topics, weak at spotting generic "slop". Jev reads longer instructions and handles nuance better.</p>
+    <label class="row"><span>Hide posts Fastino refuses to process <span class="muted">(its usage policy rejects many hostile posts;
+      off = leave them visible)</span></span><input type="checkbox" id="refusals"></label>
+  </section>
+
+  <section>
+    <h2>What gets sent, and where</h2>
+    <p>When filtering is on, Quiet Feed sends each post it evaluates on your X home timeline to the model you
+      picked above, using your API key: the post text, any quoted-post text, image descriptions and labels,
+      whether a video is attached, and the wording of the filters and topics you enabled. GLiNER sends to
+      Fastino (api.fastino.ai); Jev sends to TypeSafe (api.typesafe.ai).</p>
+    <p>Fastino says it trains on customer data unless you are on a Pro or Custom plan and opt out.</p>
     <p>It does not send direct messages, drafts, cookies, your account details, or anything else on the page.
       Decisions are cached on this device for 24 hours as hashes and scores; post text is not stored in that cache.
       The last 50 hidden posts (author, first 280 characters, reason) are kept in memory so you can review them
       in the popup; that list is erased when the browser closes.</p>
     <p class="muted">AI video filtering is based on text and labels only. Quiet Feed cannot see video footage.</p>
-    <label class="row"><span>I understand, and want to allow sending post text to TypeSafe</span><input type="checkbox" id="disclosure"></label>
+    <label class="row"><span>I understand, and want to allow sending post text to the model I picked</span><input type="checkbox" id="disclosure"></label>
   </section>
 
   <section>
-    <h2>API key</h2>
-    <input type="password" id="key" autocomplete="off" spellcheck="false" placeholder="Paste your TypeSafe API key">
-    <label class="row"><span>Session only (re-enter after restarting Chrome)</span><input type="radio" name="mode" value="session"></label>
+    <h2>API keys</h2>
+    <div class="key-block" data-provider="gliner">
+      <label for="key-gliner"><strong>Fastino</strong> <span class="muted">(keys start with fast_sk_)</span></label>
+      <input type="password" id="key-gliner" autocomplete="off" spellcheck="false" placeholder="Paste your Fastino API key">
+      <p><button class="primary" data-action="save">Save and test</button> <button data-action="test">Test</button>
+        <button class="danger" data-action="delete">Delete</button></p>
+      <div class="muted" data-role="status"></div>
+    </div>
+    <div class="key-block" data-provider="jev">
+      <label for="key-jev"><strong>TypeSafe</strong></label>
+      <input type="password" id="key-jev" autocomplete="off" spellcheck="false" placeholder="Paste your TypeSafe API key">
+      <p><button class="primary" data-action="save">Save and test</button> <button data-action="test">Test</button>
+        <button class="danger" data-action="delete">Delete</button></p>
+      <div class="muted" data-role="status"></div>
+    </div>
+    <label class="row"><span>Session only (re-enter after restarting the browser)</span><input type="radio" name="mode" value="session"></label>
     <label class="row"><span>Remember on this device</span><input type="radio" name="mode" value="local"></label>
-    <p class="muted">"Remember" stores the key in this extension's local storage, readable only by the extension's
+    <p class="muted">"Remember" stores keys in this extension's local storage, readable only by the extension's
       own pages and service worker. It is not encrypted and is never synced or exported.</p>
-    <p><button class="primary" id="save-key">Save and test</button> <button id="test">Test connection</button>
-      <button class="danger" id="delete-key">Delete saved key</button></p>
-    <div id="connection" class="muted"></div>
   </section>
 
   <section>

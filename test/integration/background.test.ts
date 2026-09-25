@@ -20,7 +20,7 @@ const KEY = "sk-test-SECRET-123";
 async function boot(settings: Partial<Settings> = {}, { key = KEY as string | null } = {}) {
   const stub = installChrome();
   await stub.chrome.storage.local.set({
-    settings: { ...DEFAULT_SETTINGS, enabled: true, disclosureAccepted: true, ...settings },
+    settings: { ...DEFAULT_SETTINGS, backend: "jev", enabled: true, disclosureAccepted: true, ...settings },
   });
   if (key) await stub.chrome.storage.session.set({ jevApiKey: key });
   globalThis.setInterval = ((...args: Parameters<typeof setInterval>) => {
@@ -186,7 +186,7 @@ test("quote tweets of rage bait are hidden by the quoted-post rule", async () =>
 test("content scripts may only use content messages; foreign senders are ignored", async () => {
   const stub = await boot();
   for (const type of ["getStatus", "saveKey", "deleteKey", "testConnection", "clearCache", "clearRecentBlocked"]) {
-    const res = await stub.send({ type, key: "x", mode: "local" }, X_TAB);
+    const res = await stub.send({ type, provider: "jev", key: "x", mode: "local" }, X_TAB);
     assert.deepEqual(res, { ok: false, error: "Not allowed" }, type);
   }
   await assert.rejects(stub.send({ type: "getStatus" }, { id: "some-other-extension", url: "https://evil.example" }));
@@ -196,7 +196,7 @@ test("content scripts may only use content messages; foreign senders are ignored
 test("the API key never reaches content scripts or local storage in session mode", async () => {
   const stub = await boot({}, { key: null });
   installFetch((body) => jevAnswer(body, 0.5, "jev-ping"));
-  const saved = await stub.send({ type: "saveKey", key: `  ${KEY}  `, mode: "session" });
+  const saved = await stub.send({ type: "saveKey", provider: "jev", key: `  ${KEY}  `, mode: "session" });
   assert.equal((saved.result as { state: string }).state, "ok");
 
   assert.equal((await stub.chrome.storage.session.get("jevApiKey")).jevApiKey, KEY);
@@ -210,12 +210,12 @@ test("the API key never reaches content scripts or local storage in session mode
 test("switching key storage mode moves the key, and delete removes it everywhere", async () => {
   const stub = await boot({}, { key: null });
   installFetch((body) => jevAnswer(body, 0.5));
-  await stub.send({ type: "saveKey", key: KEY, mode: "session" });
-  await stub.send({ type: "saveKey", key: KEY, mode: "local" });
+  await stub.send({ type: "saveKey", provider: "jev", key: KEY, mode: "session" });
+  await stub.send({ type: "saveKey", provider: "jev", key: KEY, mode: "local" });
   assert.deepEqual(await stub.chrome.storage.session.get("jevApiKey"), {});
   assert.equal((await stub.chrome.storage.local.get("jevApiKey")).jevApiKey, KEY);
 
-  await stub.send({ type: "deleteKey" });
+  await stub.send({ type: "deleteKey", provider: "jev" });
   assert.deepEqual(await stub.chrome.storage.local.get("jevApiKey"), {});
   assert.equal((await status(stub)).hasKey, false);
   assert.deepEqual((await status(stub)).connection, { state: "no_key" });
@@ -224,7 +224,7 @@ test("switching key storage mode moves the key, and delete removes it everywhere
 test("a failed connection test reports the HTTP status without the key", async () => {
   const stub = await boot();
   installFetch(() => new Response("", { status: 403 }));
-  const res = await stub.send<{ state: string; message: string }>({ type: "testConnection" });
+  const res = await stub.send<{ state: string; message: string }>({ type: "testConnection", provider: "jev" });
   assert.equal(res.result!.state, "error");
   assert.match(res.result!.message, /403/);
   assert.ok(!JSON.stringify(res).includes(KEY));
@@ -370,7 +370,7 @@ test("latency is the time spent in the API call", async () => {
 test("the connection test asks one yes/no question with both criteria, in a single attempt", async () => {
   const stub = await boot();
   const calls = installFetch(() => new Response("", { status: 503 }));
-  await stub.send({ type: "testConnection" });
+  await stub.send({ type: "testConnection", provider: "jev" });
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].body.questions.ping.criteria, { true: "Yes", false: "No" });
 });
@@ -394,4 +394,155 @@ test("the queue runs two different posts at once and caps the backlog at 50", as
   const results = await Promise.all(pending);
   assert.equal(peak, 2);
   assert.equal(results.filter((d) => d.reason === "api_error").length, 1);
+});
+
+// ---- GLiNER (Fastino) backend ----
+
+/** Fastino reply giving P(positive) per task name (default 0.1). */
+function fastinoAnswer(body: any, pByTask: Record<string, number> = {}) {
+  const content: Record<string, { label: string; confidence: number }> = {};
+  for (const c of body.schema.classifications) {
+    const p = pByTask[c.task] ?? 0.1;
+    content[c.task] = p >= 0.5 ? { label: c.labels[0], confidence: p } : { label: c.labels[1], confidence: 1 - p };
+  }
+  return Response.json({
+    model: "fastino/gliner2.5-multi-v1",
+    choices: [{ message: { role: "assistant", content: JSON.stringify(content) } }],
+    usage: { prompt_tokens: 20, completion_tokens: 40 },
+  });
+}
+const FAST_KEY = "fast_sk_test_KEY";
+const policyRefusal = () =>
+  new Response(JSON.stringify({ error: { message: "This request was rejected because its content violates the usage policy." } }), { status: 400 });
+
+async function bootGliner(settings: Partial<Settings> = {}, { key = FAST_KEY as string | null } = {}) {
+  const stub = await boot({ backend: "gliner", ...settings }, { key: null });
+  if (key) await stub.chrome.storage.session.set({ fastinoApiKey: key });
+  return stub;
+}
+
+test("GLiNER is the default backend and classifies through Fastino with its own key", async () => {
+  assert.equal(DEFAULT_SETTINGS.backend, "gliner");
+  const stub = await bootGliner();
+  await stub.chrome.storage.session.set({ jevApiKey: KEY });
+  const calls = installFetch((body) => fastinoAnswer(body, { tone: 0.97 }));
+  const d = await classify(stub);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://api.fastino.ai/v1/chat/completions");
+  assert.equal((calls[0].init.headers as Record<string, string>).Authorization, `Bearer ${FAST_KEY}`);
+  assert.equal(calls[0].body.model, "fastino/gliner2.5-multi-v1");
+  assert.deepEqual(calls[0].body.messages, [{ role: "user", content: post().text }]);
+  assert.equal(d.hide, true);
+  assert.deepEqual(d.matched.map((m) => m.ruleId), ["rage_bait"]);
+  const s = await status(stub);
+  assert.deepEqual(s.usage.inputTokens, 20);
+  assert.deepEqual(s.keys, { jev: true, gliner: true });
+  assert.equal(s.hasKey, true);
+});
+
+test("GLiNER without a Fastino key stays visible even if a Jev key exists", async () => {
+  const stub = await bootGliner({}, { key: null });
+  await stub.chrome.storage.session.set({ jevApiKey: KEY });
+  const calls = installFetch((body) => fastinoAnswer(body));
+  assert.equal((await classify(stub)).reason, "no_key");
+  assert.equal(calls.length, 0);
+  assert.equal((await status(stub)).hasKey, false);
+});
+
+test("a Fastino refusal hides the post by default, is cached, and is counted", async () => {
+  const stub = await bootGliner();
+  const calls = installFetch(() => policyRefusal());
+  const d = await classify(stub);
+  assert.equal(d.hide, true);
+  assert.deepEqual(d.matched.map((m) => m.label), ["Refused by Fastino"]);
+  const again = await classify(stub);
+  assert.equal(again.hide, true);
+  assert.equal(calls.length, 1, "refusal was not cached");
+  const { usage } = await status(stub);
+  assert.equal(usage.refused, 1);
+  assert.equal(usage.errors, 0);
+});
+
+test("with refusals not hidden, a refused post stays visible", async () => {
+  const stub = await bootGliner({ hideProviderRefusals: false });
+  installFetch(() => policyRefusal());
+  const d = await classify(stub);
+  assert.equal(d.hide, false);
+  assert.equal(d.reason, "provider_refused");
+});
+
+test("a refused quote does not hide a post whose own text is fine, unless refusals hide", async () => {
+  const quoted = post({ text: "calm take", quotedText: "hostile quoted post" });
+  for (const [hideProviderRefusals, expected] of [[true, true], [false, false]] as const) {
+    const stub = await bootGliner({ hideProviderRefusals });
+    installFetch((body) => (body.messages[0].content === "hostile quoted post" ? policyRefusal() : fastinoAnswer(body)));
+    assert.equal((await classify(stub, quoted)).hide, expected, `hideProviderRefusals=${hideProviderRefusals}`);
+  }
+});
+
+test("switching backend changes the cache key and the provider", async () => {
+  const stub = await bootGliner();
+  await stub.chrome.storage.session.set({ jevApiKey: KEY });
+  const calls = installFetch((body) => (body.messages ? fastinoAnswer(body) : jevAnswer(body, 0.1)));
+  await classify(stub);
+  const s = (await stub.chrome.storage.local.get("settings")).settings as Settings;
+  await stub.chrome.storage.local.set({ settings: { ...s, backend: "jev" } });
+  await classify(stub);
+  assert.deepEqual(calls.map((c) => new URL(c.url).host), ["api.fastino.ai", "api.typesafe.ai"]);
+});
+
+test("per-provider keys: save, test, and delete touch only that provider", async () => {
+  const stub = await bootGliner({}, { key: null });
+  installFetch((body) => (body.messages ? fastinoAnswer(body, { "connection test": 0.9 }) : jevAnswer(body, 0.5)));
+  const saved = await stub.send<{ state: string; model: string }>({ type: "saveKey", provider: "gliner", key: FAST_KEY, mode: "session" });
+  assert.deepEqual([saved.result!.state, saved.result!.model], ["ok", "fastino/gliner2.5-multi-v1"]);
+  await stub.send({ type: "saveKey", provider: "jev", key: KEY, mode: "local" });
+  let s = await status(stub);
+  assert.deepEqual(s.keys, { jev: true, gliner: true });
+  assert.equal(s.connections.gliner.state, "ok");
+  assert.equal(s.connection.state, "ok");
+
+  await stub.send({ type: "deleteKey", provider: "gliner" });
+  s = await status(stub);
+  assert.deepEqual(s.keys, { jev: true, gliner: false });
+  assert.deepEqual(s.connections.gliner, { state: "no_key" });
+  assert.equal(s.connections.jev.state, "ok");
+});
+
+test("a Fastino connection failure reports the status without the key", async () => {
+  const stub = await bootGliner();
+  const calls = installFetch(() => new Response("", { status: 401 }));
+  const res = await stub.send<{ state: string; message: string }>({ type: "testConnection", provider: "gliner" });
+  assert.equal(calls.length, 1);
+  assert.equal(res.result!.state, "error");
+  assert.match(res.result!.message, /HTTP 401/);
+  assert.ok(!JSON.stringify(res).includes(FAST_KEY));
+});
+
+test("GLiNER API errors leave the post visible", async () => {
+  const stub = await bootGliner();
+  installFetch(() => new Response("", { status: 401 }));
+  const d = await classify(stub);
+  assert.deepEqual([d.hide, d.reason], [false, "api_error"]);
+  assert.match(d.explanation, /Fastino returned HTTP 401/);
+});
+
+test("unknown providers are rejected", async () => {
+  const stub = await bootGliner();
+  for (const type of ["saveKey", "deleteKey", "testConnection"]) {
+    const res = await stub.send({ type, provider: "openai", key: "x", mode: "session" });
+    assert.deepEqual(res, { ok: false, error: "Unknown provider" }, type);
+  }
+});
+
+test("the daily limit counts every GLiNER call a post needs", async () => {
+  const stub = await bootGliner({ dailyRequestLimit: 3 });
+  const calls = installFetch((body) => fastinoAnswer(body));
+  await classify(stub, post({ statusId: "1", text: "first", quotedText: "a quote" })); // 2 calls
+  assert.equal((await status(stub)).usage.requests, 2);
+  const d = await classify(stub, post({ statusId: "2", text: "second", quotedText: "another quote" })); // would be 4
+  assert.equal(d.reason, "daily_limit");
+  assert.equal(calls.length, 2);
+  await classify(stub, post({ statusId: "3", text: "third" })); // 1 call fits exactly
+  assert.equal((await status(stub)).usage.requests, 3);
 });

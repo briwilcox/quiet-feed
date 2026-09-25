@@ -1,5 +1,5 @@
 import { loadSettings, saveSettings } from "../shared/settings.ts";
-import type { ConnectionStatus, CustomTopic, KeyStorageMode, Message, StatusResponse } from "../shared/types.ts";
+import type { Backend, ConnectionStatus, CustomTopic, KeyStorageMode, Message, StatusResponse } from "../shared/types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -9,8 +9,11 @@ async function send<T>(msg: Message): Promise<T> {
   return res.result as T;
 }
 
-function showConnection(c: ConnectionStatus) {
-  const el = $("#connection");
+const statusEl = (provider: Backend) =>
+  document.querySelector<HTMLElement>(`.key-block[data-provider="${provider}"] [data-role="status"]`)!;
+
+function showConnection(provider: Backend, c: ConnectionStatus) {
+  const el = statusEl(provider);
   el.className = c.state === "ok" ? "ok" : c.state === "error" ? "err" : "muted";
   el.textContent =
     c.state === "ok" ? `Connected. Model: ${c.model}`
@@ -20,7 +23,15 @@ function showConnection(c: ConnectionStatus) {
 }
 
 async function render() {
-  const { settings, connection } = await send<StatusResponse>({ type: "getStatus" });
+  const { settings, connections } = await send<StatusResponse>({ type: "getStatus" });
+
+  document.querySelectorAll<HTMLInputElement>('input[name="backend"]').forEach((r) => {
+    r.checked = r.value === settings.backend;
+    r.onchange = () => r.checked && saveSettings({ backend: r.value as Backend });
+  });
+  const refusals = $<HTMLInputElement>("#refusals");
+  refusals.checked = settings.hideProviderRefusals;
+  refusals.onchange = () => saveSettings({ hideProviderRefusals: refusals.checked });
 
   const disclosure = $<HTMLInputElement>("#disclosure");
   disclosure.checked = settings.disclosureAccepted;
@@ -30,7 +41,8 @@ async function render() {
   document.querySelectorAll<HTMLInputElement>('input[name="mode"]').forEach((r) => {
     r.checked = r.value === settings.keyStorageMode;
   });
-  showConnection(connection);
+  showConnection("gliner", connections.gliner);
+  showConnection("jev", connections.jev);
 
   renderTopics(settings.topics);
   renderAuthors(settings.allowedAuthors);
@@ -109,26 +121,31 @@ function renderAuthors(authors: string[]) {
   );
 }
 
-$("#save-key").addEventListener("click", async () => {
-  const input = $<HTMLInputElement>("#key");
-  const key = input.value.trim();
-  if (!key) return;
-  const mode = (document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value ?? "session") as KeyStorageMode;
-  await saveSettings({ keyStorageMode: mode });
-  input.value = "";
-  $("#connection").textContent = "Testing…";
-  showConnection(await send<ConnectionStatus>({ type: "saveKey", key, mode }));
-});
+document.querySelectorAll<HTMLElement>(".key-block").forEach((block) => {
+  const provider = block.dataset.provider as Backend;
+  const input = block.querySelector<HTMLInputElement>("input")!;
+  const button = (action: string) => block.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
+  const testing = () => (statusEl(provider).textContent = "Testing…");
 
-$("#test").addEventListener("click", async () => {
-  $("#connection").textContent = "Testing…";
-  showConnection(await send<ConnectionStatus>({ type: "testConnection" }));
-});
-
-$("#delete-key").addEventListener("click", async () => {
-  await send({ type: "deleteKey" });
-  await saveSettings({ enabled: false });
-  await render();
+  button("save").addEventListener("click", async () => {
+    const key = input.value.trim();
+    if (!key) return;
+    const mode = (document.querySelector<HTMLInputElement>('input[name="mode"]:checked')?.value ?? "session") as KeyStorageMode;
+    await saveSettings({ keyStorageMode: mode });
+    input.value = "";
+    testing();
+    showConnection(provider, await send<ConnectionStatus>({ type: "saveKey", provider, key, mode }));
+  });
+  button("test").addEventListener("click", async () => {
+    testing();
+    showConnection(provider, await send<ConnectionStatus>({ type: "testConnection", provider }));
+  });
+  button("delete").addEventListener("click", async () => {
+    await send({ type: "deleteKey", provider });
+    const s = await loadSettings();
+    if (s.backend === provider) await saveSettings({ enabled: false });
+    await render();
+  });
 });
 
 $("#add-topic").addEventListener("click", async () => {

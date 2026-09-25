@@ -11,11 +11,17 @@
   <div id="error" class="err" hidden></div>
   <div id="setup" class="muted" hidden>Finish setup in <a href="#" class="open-options">settings</a> to start filtering.</div>
   <label class="row"><strong>Filtering</strong><input type="checkbox" id="enabled"></label>
+  <label class="row">Model
+    <select id="backend" style="width:auto">
+      <option value="gliner">GLiNER2.5 (Fastino)</option>
+      <option value="jev">Jev (TypeSafe)</option>
+    </select>
+  </label>
 
   <section>
     <h2>Filters</h2>
     <label class="row">Rage bait <input type="checkbox" data-filter="rage_bait"></label>
-    <label class="row">LLM slop <input type="checkbox" data-filter="llm_slop"></label>
+    <label class="row"><span>LLM slop <span class="muted" id="slop-note" hidden>(needs Jev)</span></span><input type="checkbox" data-filter="llm_slop"></label>
     <label class="row"><span>AI video slop <span class="muted">(text and labels only)</span></span><input type="checkbox" data-filter="ai_video_slop"></label>
     <div id="topics"></div>
     <label class="row">Sensitivity

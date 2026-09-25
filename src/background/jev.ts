@@ -112,7 +112,7 @@ const QUOTED_RAGE_BAIT: Omit<NoulQuestion, "type"> = {
 };
 
 export function buildRequest(post: PostPayload, settings: Settings): { body: JevRequest; rules: RuleMeta[] } {
-  const thresholds = THRESHOLDS[settings.sensitivity];
+  const thresholds = THRESHOLDS.jev[settings.sensitivity];
   const questions: Record<string, NoulQuestion> = {};
   const rules: RuleMeta[] = [];
 

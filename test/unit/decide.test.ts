@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { decide, preDecide } from "../../src/background/decide.ts";
+import { applyRefusal, decide, preDecide } from "../../src/background/decide.ts";
 import { DEFAULT_SETTINGS } from "../../src/shared/settings.ts";
 import type { PostPayload, Settings } from "../../src/shared/types.ts";
 
@@ -72,4 +72,28 @@ test("allowed author check is case-insensitive and explains itself", () => {
 
 test("no enabled rules means visible, checked before truncation", () => {
   assert.equal(preDecide({ ...post, textTruncated: true }, on, false)?.reason, "no_rules");
+});
+
+test("a refusal hides the post by default, labeled as refused", () => {
+  const d = applyRefusal(decide(rules, {}, on), true, on);
+  assert.equal(d.hide, true);
+  assert.deepEqual(d.matched, [{ ruleId: "provider_refused", label: "Refused by Fastino", probability: 1, threshold: 0 }]);
+  assert.match(d.explanation, /refused to process this post/);
+});
+
+test("a refusal adds to an existing match", () => {
+  const d = applyRefusal(decide(rules, { rage_bait: 0.9 }, on), true, on);
+  assert.deepEqual(d.matched.map((m) => m.ruleId), ["rage_bait", "provider_refused"]);
+  assert.match(d.explanation, /^Matched your Rage bait filter .* Fastino also refused/);
+});
+
+test("with refusals not hidden, a refused post stays visible unless another rule matched", () => {
+  const off = { ...on, hideProviderRefusals: false };
+  assert.deepEqual(applyRefusal(decide(rules, {}, off), true, off), { hide: false, reason: "provider_refused", matched: [], explanation: "" });
+  assert.equal(applyRefusal(decide(rules, { rage_bait: 0.9 }, off), true, off).hide, true);
+});
+
+test("no refusal leaves the decision untouched", () => {
+  const d = decide(rules, { rage_bait: 0.9 }, on);
+  assert.equal(applyRefusal(d, false, on), d);
 });

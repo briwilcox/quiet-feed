@@ -8,7 +8,8 @@
   "host_permissions": [
     "https://x.com/*",
     "https://twitter.com/*",
-    "https://api.typesafe.ai/*"
+    "https://api.typesafe.ai/*",
+    "https://api.fastino.ai/*"
   ],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [

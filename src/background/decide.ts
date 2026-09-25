@@ -1,4 +1,4 @@
-import { SENSITIVITY_LABELS } from "../shared/settings.ts";
+import { RULE_LABELS, SENSITIVITY_LABELS } from "../shared/settings.ts";
 import type { Decision, DecisionReason, PostPayload, Settings } from "../shared/types.ts";
 import type { RuleMeta } from "./jev.ts";
 
@@ -39,5 +39,25 @@ export function decide(
     reason: "hidden",
     matched,
     explanation: `Matched your ${labels} filter${matched.length > 1 ? "s" : ""} at ${SENSITIVITY_LABELS[settings.sensitivity]} sensitivity.`,
+  };
+}
+
+/**
+ * The provider refused to process the post under its usage policy. Fastino
+ * refuses many hostile posts, so by default that refusal hides the post; with
+ * the setting off, the post stays visible like any other failure.
+ */
+export function applyRefusal(d: Decision, refused: boolean, settings: Settings): Decision {
+  if (!refused) return d;
+  if (!settings.hideProviderRefusals) return d.hide ? d : visible("provider_refused");
+  const refusal = { ruleId: "provider_refused", label: RULE_LABELS.provider_refused, probability: 1, threshold: 0 };
+  const matched = [...d.matched, refusal];
+  return {
+    hide: true,
+    reason: "hidden",
+    matched,
+    explanation: d.hide
+      ? `${d.explanation} Fastino also refused to process it.`
+      : "Fastino refused to process this post under its usage policy, which usually means hostile content.",
   };
 }

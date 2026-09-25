@@ -1,6 +1,8 @@
 export type BuiltInFilterId = "rage_bait" | "llm_slop" | "ai_video_slop";
 export type Sensitivity = "conservative" | "balanced" | "aggressive";
 export type KeyStorageMode = "session" | "local";
+/** Which hosted classifier runs: Fastino's GLiNER2.5 or TypeSafe's Jev. */
+export type Backend = "gliner" | "jev";
 
 export interface CustomTopic {
   id: string;
@@ -14,6 +16,9 @@ export interface Settings {
   enabled: boolean;
   /** Set once the user has read the privacy disclosure on the settings page. */
   disclosureAccepted: boolean;
+  backend: Backend;
+  /** Hide posts the provider refuses under its usage policy (Fastino refuses many hostile posts). */
+  hideProviderRefusals: boolean;
   filters: Record<BuiltInFilterId, boolean>;
   sensitivity: Sensitivity;
   topics: CustomTopic[];
@@ -53,7 +58,8 @@ export type DecisionReason =
   | "no_rules"
   | "no_key"
   | "daily_limit"
-  | "api_error";
+  | "api_error"
+  | "provider_refused";
 
 export interface Decision {
   hide: boolean;
@@ -76,6 +82,8 @@ export interface UsageStats {
   checked: number;
   /** Distinct posts hidden, counted once per post per page load. */
   blocked: number;
+  /** Requests the provider refused under its usage policy. */
+  refused: number;
   hiddenByRule: Record<string, number>;
 }
 
@@ -98,9 +106,9 @@ export type Message =
   | { type: "classify"; post: PostPayload }
   | { type: "getContentConfig" }
   | { type: "getStatus" }
-  | { type: "saveKey"; key: string; mode: KeyStorageMode }
-  | { type: "deleteKey" }
-  | { type: "testConnection" }
+  | { type: "saveKey"; provider: Backend; key: string; mode: KeyStorageMode }
+  | { type: "deleteKey"; provider: Backend }
+  | { type: "testConnection"; provider: Backend }
   | { type: "clearCache" }
   | {
       type: "recordResult";
@@ -122,8 +130,13 @@ export interface ContentConfig {
 
 export interface StatusResponse {
   settings: Settings;
+  /** Whether a key is saved for each provider. */
+  keys: Record<Backend, boolean>;
+  /** Whether the selected backend has a key. */
   hasKey: boolean;
+  /** Connection state of the selected backend. */
   connection: ConnectionStatus;
+  connections: Record<Backend, ConnectionStatus>;
   usage: UsageStats;
   recentBlocked: BlockedPost[];
 }
