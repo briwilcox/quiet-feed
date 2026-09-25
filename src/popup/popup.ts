@@ -1,4 +1,5 @@
 import { RULE_LABELS, saveSettings } from "../shared/settings.ts";
+import { RevealState, loadHiddenPref, saveHiddenPref } from "./reveal.ts";
 import type { BlockedPost, BuiltInFilterId, Message, Sensitivity, StatusResponse } from "../shared/types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
@@ -95,8 +96,15 @@ async function render() {
   ]);
 }
 
+const reveal = new RevealState(loadHiddenPref());
+let lastRecent: BlockedPost[] = [];
+
 function renderRecent(list: BlockedPost[]) {
+  lastRecent = list;
   $("#clear-recent").hidden = list.length === 0;
+  const toggleAll = $("#toggle-recent");
+  toggleAll.hidden = list.length === 0;
+  toggleAll.textContent = reveal.allHidden ? "Show all" : "Hide all";
   if (list.length === 0) {
     $("#recent").innerHTML = '<p class="muted">Nothing blocked since the browser opened.</p>';
     return;
@@ -114,15 +122,41 @@ function renderRecent(list: BlockedPost[]) {
     open.target = "_blank";
     open.rel = "noopener";
     open.textContent = "Open";
-    meta.append(who, open);
+    const visible = reveal.isVisible(b.statusId);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "reveal";
+    toggle.textContent = visible ? "Hide" : "Show";
+    toggle.setAttribute("aria-expanded", String(visible));
+    const flip = () => {
+      reveal.toggle(b.statusId);
+      renderRecent(lastRecent);
+    };
+    toggle.addEventListener("click", flip);
+    const actions = document.createElement("span");
+    actions.className = "actions";
+    actions.append(toggle, open);
+    meta.append(who, actions);
     const snippet = document.createElement("div");
-    snippet.className = "snippet";
-    snippet.textContent = b.snippet || "(no text)";
+    if (visible) {
+      snippet.className = "snippet";
+      snippet.textContent = b.snippet || "(no text)";
+    } else {
+      snippet.className = "concealed";
+      snippet.textContent = "Content hidden. Click to show.";
+      snippet.addEventListener("click", flip);
+    }
     li.append(meta, snippet);
     ul.append(li);
   }
   $("#recent").replaceChildren(ul);
 }
+
+$("#toggle-recent").addEventListener("click", () => {
+  reveal.setAllHidden(!reveal.allHidden);
+  saveHiddenPref(reveal.allHidden);
+  renderRecent(lastRecent);
+});
 
 $("#clear-recent").addEventListener("click", async () => {
   await send({ type: "clearRecentBlocked" });
