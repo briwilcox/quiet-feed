@@ -173,4 +173,4 @@ The integration tests also build the extension into a temporary folder and load 
 
 ## License
 
-No license file yet. Until one is added, the repository is private and all rights are reserved.
+MIT; see [LICENSE](LICENSE). The model the local server downloads, `fastino/GLiNER2.5-Decide`, and the `gliner2` library are separately licensed under Apache-2.0.

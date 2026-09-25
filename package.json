@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Chrome extension that filters X timelines with the user's own TypeSafe Jev API key.",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
