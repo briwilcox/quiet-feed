@@ -1,58 +1,59 @@
 # Quiet Feed
 
-Quiet Feed is a Chrome extension (Manifest V3) that hides rage bait, low-substance posts, and topics you choose from your X home timeline. Each hidden post turns into a one-line placeholder with **Show post** and **Always allow @author**, so nothing is ever deleted and every decision is reversible.
+Quiet Feed is a browser extension (Chrome Manifest V3, also tested in Brave) that hides rage bait, low-effort filler, and topics you choose from your social feed. It works on the X home timeline today. The classification side knows nothing about X, so other feeds such as Threads or LinkedIn need only a small site adapter; see [Adding another site](#adding-another-site).
 
-Posts are classified by one of three models. You pick which:
+A hidden post collapses into one line, for example "Hidden: Rage bait · Show post · Always allow @author". Nothing is deleted, and every decision can be undone from the feed or the popup.
 
-| Model | Runs | Default | Good at | Weak at |
+## Models
+
+You choose which model judges posts:
+
+| Model | Where it runs | Default | Strengths | Weaknesses |
 |---|---|---|---|---|
-| Jev (`jev-latest`) | TypeSafe's cloud, your API key | Yes | Long instructions and nuance, including slop | Needs a TypeSafe key |
-| GLiNER2.5 (`fastino/gliner2.5-multi-v1`) | Fastino's cloud, your API key | No | Rage bait, quoted rage bait, custom topics; about 0.5 seconds per question | Generic "slop" (not offered), topic exceptions; Fastino refuses some hostile posts |
-| GLiNER2.5-Decide (`fastino/GLiNER2.5-Decide`) | This computer, through the optional [local server](#local-model) | No | Rage bait, slop, topics; no key, no cost, post text never leaves the computer; about 0.1 seconds per question on an Apple GPU | Needs a Python server running; slop sometimes also fires on hype and rage posts |
-
-The full product and technical spec is in [docs/SPEC.md](docs/SPEC.md).
+| Jev (`jev-latest`) by TypeSafe | TypeSafe's API, with your key | Yes | Reads long instructions; handles nuance, including slop | Needs a TypeSafe key |
+| GLiNER2.5 (`fastino/gliner2.5-multi-v1`) by Fastino | Fastino's API, with your key | No | Rage bait, quoted rage bait, and topics, about 0.5 seconds per question | No slop filter; unreliable topic exceptions; Fastino refuses some hostile posts |
+| GLiNER2.5-Decide (`fastino/GLiNER2.5-Decide`) | Your computer, through the optional [local server](#local-model) | No | Rage bait, slop, and topics with no key or cost, and post text stays on your computer; about 0.1 seconds per question on an Apple GPU | You run a Python server; slop also flags some hype and rage posts |
 
 ## What it filters
 
-| Filter | Jev | GLiNER (Fastino) | GLiNER-Decide (local) |
+| Filter | Jev | GLiNER (Fastino) | GLiNER2.5-Decide (local) |
 |---|---|---|---|
-| Rage bait (the author's own text) | Yes | Yes | Yes |
+| Rage bait in the author's own text | Yes | Yes | Yes |
 | Rage bait in a quoted post | Yes | Yes | Yes |
 | LLM slop (generic, formulaic filler) | Yes | No, see [Model notes](#model-notes) | Yes |
-| AI video slop, judged from text and labels only | Yes | Yes | Yes |
+| AI video slop, judged from the caption and media labels | Yes | Yes | Yes |
 | Custom topics, with optional exceptions | Yes | Yes | Yes |
 
-Quiet Feed cannot see video footage. AI video filtering reads only the caption and any media labels.
+Quiet Feed never looks at video footage, only the text around it.
 
-Filtering covers the For You and Following timelines at `x.com/home`. Search, profiles, lists, and replies are not filtered yet.
+On X it filters the For You and Following timelines at `x.com/home`. Search, profiles, lists, and replies are left alone.
 
 ## Install
 
-Quiet Feed is not in the Chrome Web Store. Load it unpacked:
+Quiet Feed is not in the Chrome Web Store yet, so you load it unpacked:
 
-1. Build it (see [Develop](#develop)), or use an existing `dist/` folder.
-2. Open `chrome://extensions` (or `brave://extensions`), turn on **Developer mode**, click **Load unpacked**, and select the `dist/` folder.
+1. Build it (see [Develop](#develop)).
+2. Open `chrome://extensions` (`brave://extensions` in Brave), turn on **Developer mode**, click **Load unpacked**, and choose the `dist/` folder.
 3. Pin Quiet Feed from the extensions menu.
 
-After pulling new code, rebuild, click the reload icon on the extension's card, and reload your X tabs.
+After you pull new code and rebuild, click the reload icon on Quiet Feed's card, then reload your X tabs. The browser keeps running the old background code until you do; the popup and settings page say so when that happens.
 
 ## Set up
 
-1. Open the extension's **Settings**.
-2. Under **Model**, keep Jev (TypeSafe), the default, or choose GLiNER2.5 (Fastino) or GLiNER2.5-Decide on this computer. The local option switches over only after its server answers; see [Local model](#local-model).
-3. For a cloud model, read **What gets sent, and where**, then check the box to allow it. The local model does not need this.
-4. For a cloud model, paste its key under **API keys** and click **Save and test**. Fastino keys start with `fast_sk_`. Choose **Session only** (you re-enter the key after restarting the browser) or **Remember on this device**.
-5. Add custom topics if you want them, then turn on **Filtering** in the popup.
+1. Open Quiet Feed's **Settings**.
+2. Under **Model**, keep Jev, pick GLiNER2.5 (Fastino), or pick GLiNER2.5-Decide on this computer. The local option switches only after its server answers.
+3. For Jev or Fastino, read **What gets sent, and where** and check the box, then paste your key under **API keys** and click **Save and test**. Fastino keys start with `fast_sk_`. Choose **Session only** to re-enter the key after each browser restart, or **Remember on this device**.
+4. Add custom topics if you want them, then turn on **Filtering** in the popup.
 
-The popup shows today's blocked and checked counts, a per-filter breakdown, the most recently hidden posts (hidden until you click **Show**), the model and its connection status, and usage. The toolbar badge shows today's blocked count.
+The popup shows today's blocked and checked counts, the reasons, the most recently hidden posts (their text stays covered until you click **Show**), the model's connection status, and usage. The toolbar badge counts today's hidden posts.
 
 ## Local model
 
-The local model is optional; the extension works without it. It runs `fastino/GLiNER2.5-Decide` (340 million parameters, Apache-2.0) in a small Python server on `127.0.0.1`. It uses the Apple GPU when available, otherwise the CPU.
+The local model is optional. It runs `fastino/GLiNER2.5-Decide`, a 340-million-parameter classifier, in a small Python server that listens on `127.0.0.1`, on the Apple GPU when there is one and on the CPU otherwise.
 
 ### Install once
 
-Requires Python 3.10 or later and [uv](https://docs.astral.sh/uv/).
+You need Python 3.10 or later and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 cd local-server
@@ -66,7 +67,7 @@ uv venv --python 3.12 .venv
 VIRTUAL_ENV="$PWD/.venv" uv pip install --no-deps --require-hashes -r requirements.lock
 ```
 
-`requirements.lock` pins all 45 packages with hashes, none newer than 14 days when locked. It overrides `gliner2`'s declared `transformers<5` with `transformers==5.17.0`, because every 4.x release has unfixed advisories (including remote code execution when loading a malicious model config) that are fixed only in 5.x. `--no-deps` is required: a normal resolve would reject the override. To regenerate the lock, see `requirements.in` and `overrides.txt`.
+`requirements.lock` pins 45 packages by hash, none newer than 14 days when it was generated. It deliberately overrides `gliner2`'s requirement of `transformers<5` with `transformers==5.17.0`: every 4.x release carries unfixed advisories, including remote code execution through a malicious model config, and only 5.x fixes them. A normal dependency resolve would reject the override, hence `--no-deps`. `requirements.in` and `overrides.txt` regenerate the lock.
 
 ### Run
 
@@ -74,51 +75,72 @@ VIRTUAL_ENV="$PWD/.venv" uv pip install --no-deps --require-hashes -r requiremen
 cd local-server && .venv/bin/python -m quiet_feed_local
 ```
 
-The first run downloads the model (about 2 GB) from Hugging Face; later starts load it from the local cache. Leave the terminal open while you browse. Then, in the extension's settings, choose **GLiNER2.5-Decide on this computer**. Quiet Feed checks the server first and shows the model and device it reports, for example "fastino/GLiNER2.5-Decide on mps". If the server is not running, the setting does not switch.
+The first start downloads about 2 GB of model weights from Hugging Face; later starts read them from the cache. Keep the terminal open while you browse, and choose **GLiNER2.5-Decide on this computer** in Settings. Settings then shows what the server reported, for example "fastino/GLiNER2.5-Decide on mps".
 
-Options: `--port` (default 8765; change **Server address** in settings to match), `--device` (`auto`, `mps`, `cuda`, or `cpu`), `--extension-id` (accept requests only from your copy of Quiet Feed, using the ID shown on `chrome://extensions`), and `--quiet`.
+Flags: `--port` (default 8765; set **Server address** in Settings to match), `--device` (`auto`, `mps`, `cuda`, or `cpu`), `--extension-id` to accept requests only from your copy of Quiet Feed, and `--quiet` to stop logging request lines.
 
-If the server stops while local mode is selected, posts stay visible until it is back.
+If the server stops while local mode is on, posts stay visible until it comes back.
 
 ### Server security
 
-The server listens on `127.0.0.1` only. It checks that the `Host` header names 127.0.0.1 or localhost on its port, which blocks DNS rebinding. Classification requests must come from a `chrome-extension://` origin, which web pages cannot fake. It sends no CORS headers, so a web page cannot read its answers. It never logs post text.
+The server binds to `127.0.0.1` only and rejects any `Host` header other than 127.0.0.1 or localhost on its port, which blocks DNS rebinding. Classification requests must carry a `chrome-extension://` origin, which web pages cannot forge, and the server sends no CORS headers, so a web page cannot read its answers. Post text never reaches its logs.
 
 ## Privacy
 
-- **Sent:** for each post evaluated on the home timeline, Quiet Feed sends the post text, any quoted-post text, image descriptions and labels, whether a video is attached, and the wording of the filters and topics you enabled. It goes to the model you picked, and nowhere else. With the local model, it goes only to the server on your computer.
-- **Not sent:** direct messages, drafts, cookies, account details, and anything else on the page.
-- **Fastino's policy:** Fastino states that it trains on customer data unless you are on a Pro or Custom plan and opt out.
-- **Stored on this device:** decisions are cached for 24 hours as hashes and scores, with no post text. The last 50 hidden posts (author, first 280 characters, and reason) stay in memory for the popup and are erased when the browser closes.
-- **API keys:** kept in extension storage that only the extension's own pages and service worker can read. They are never synced, exported, sent to the X page, or logged. "Remember on this device" is plain local storage, not an encrypted vault.
-- **On failure:** if a request fails, the post stays visible.
+For each post it checks, Quiet Feed sends the post text, any quoted text, image descriptions and labels, whether a video is attached, and the wording of your enabled filters and topics. That goes to the model you picked and nowhere else; with the local model it never leaves your computer.
+
+Direct messages, drafts, cookies, and account details are never sent.
+
+Fastino says it trains on customer data unless you are on its Pro or Custom plan and opt out.
+
+On your device, decisions are cached for 24 hours as hashes and scores, without post text. The popup's list of the last 50 hidden posts (author, first 280 characters, and reason) lives in memory and disappears when the browser closes.
+
+API keys sit in extension storage that only Quiet Feed's own pages and background worker can read. Quiet Feed never syncs, exports, or logs them, or hands them to the web page. "Remember on this device" is ordinary local storage, not an encrypted vault.
+
+When a request fails, the post stays visible.
 
 ## Model notes
 
-These observations come from a small spot check: about 40 posts I wrote by hand, plus a few live runs. They explain the current design. They are not accuracy claims; see [Status](#status).
+These come from a small spot check (about 40 hand-written posts plus some live browsing), and they explain the current design. They are not accuracy figures.
 
-- **Wording matters for GLiNER.** GLiNER has no free-text prompt field; the task name and label names carry the question. Named labels (`"rage bait"` versus `"not rage bait"`) separated rage bait well (an AUC, or area under the curve, of 0.97 to 0.98 on 16 posts, where 1.0 separates perfectly and 0.5 is chance), and a bare topic name worked well (AUC 1.00 on 10 posts). Adding a description to a topic label broke topic detection, so GLiNER ignores topic descriptions.
-- **One question per request.** Asking several questions in one GLiNER request caused cross-talk, and Fastino refused more of those requests. Quiet Feed sends each question as its own request, in parallel. The daily request limit counts each of these calls.
-- **No slop filter on GLiNER.** No wording separated generic slop from normal posts; on live posts the scores ran backwards. Use Jev for slop.
-- **Topic exceptions are unreliable on GLiNER.** An exception competes as a third label. It kept research posts visible, but it also sometimes mistook a price-speculation post for research.
-- **Fastino refuses some hostile posts, unpredictably.** Across all runs, its usage policy rejected 18 of 40 requests about hostile test posts and none about calm ones. The rate swung from 1 in 8 to 6 in 8 depending on the question wording, on which other questions shared the request, and between runs of the identical request. A refusal is a strong hint that a post is hostile, so by default a refused post is hidden with the reason "Refused by Fastino". Turn off **Hide posts Fastino refuses to process** to leave them visible instead.
-- **The local model does better on the same posts.** Named labels separated rage bait, slop (with a one-line description per label), and topics perfectly on the hand-written set (AUC 1.00 each), and it never refuses. Asking several questions in one pass still hurt, so the server runs each question separately; on an Apple GPU that costs about 90 milliseconds per question (about 600 on the CPU). On live posts, slop also fired on hype and rage posts, and a clickbait video post scored 0.78 for rage bait, which set the local thresholds higher than the spot check alone suggested.
-- **Model version.** The only GLiNER2.5 model Fastino hosts is `fastino/gliner2.5-multi-v1`. It is probably the multilingual Decide variant, not the English `fastino/GLiNER2.5-Decide`; Fastino has not confirmed this.
-- **Thresholds are placeholders.** Each model has its own table in [src/shared/settings.ts](src/shared/settings.ts), because their scores are not on the same scale.
+GLiNER has no free-text prompt: the task name and label names carry the question, so wording matters. Named labels ("rage bait" versus "not rage bait") separated rage bait well on Fastino's model, with an AUC (area under the curve, where 1.0 separates perfectly and 0.5 is chance) of 0.97 to 0.98 on 16 posts. A bare topic name reached 1.00 on 10 posts. Adding a description to a topic label broke topic detection, so Quiet Feed sends topic names without descriptions to GLiNER.
+
+Asking several questions in one GLiNER pass made the answers bleed into each other, and Fastino refused more of those requests. Quiet Feed asks each question separately; the daily request limit counts every call.
+
+On Fastino's model, no wording separated slop from ordinary posts (live scores ran backwards), so the slop filter is off there. Topic exceptions compete as a third label and sometimes misfire: a price-speculation post once passed as "technical research".
+
+Fastino's usage policy rejected 18 of 40 requests about hostile test posts and none about calm ones, with the rate swinging from 1 in 8 to 6 in 8 across wordings and even between identical runs. Because a refusal usually means a hostile post, Quiet Feed hides refused posts by default and labels them "Refused by Fastino". **Hide posts Fastino refuses to process** in Settings turns that off.
+
+The local GLiNER2.5-Decide model separated rage bait, slop (using a one-line description per label), and topics perfectly on the same hand-written posts, and it never refuses. It still does better with one question per pass, which costs about 90 ms per question on an Apple GPU and about 600 ms on a CPU. During live browsing its slop filter also caught hype and rage posts, and a clickbait video post scored 0.78 for rage bait, so its thresholds sit higher than the spot check alone suggested.
+
+Fastino hosts one GLiNER2.5 model, `fastino/gliner2.5-multi-v1`. It is probably the multilingual variant of Decide rather than the English `fastino/GLiNER2.5-Decide`; Fastino has not said.
+
+Thresholds are placeholders, set per model in [src/shared/settings.ts](src/shared/settings.ts) because the models' scores are not on the same scale.
+
+## Adding another site
+
+Everything after extraction is site-neutral. The content script turns each post into a `PostPayload` (id, author, text, quoted text, media labels, whether a video is attached, and whether the text is truncated), and the background worker, models, cache, and decisions work only with that.
+
+To support a site such as Threads or LinkedIn:
+
+1. Write an extractor like [src/content/extract.ts](src/content/extract.ts): selectors for a post, its text, and a quoted post, plus `extractPost()` and a check for which pages to filter.
+2. Add the site to `content_scripts.matches` and `host_permissions` in [src/manifest.json](src/manifest.json), and to the tab list that settings changes are broadcast to in [src/background/index.ts](src/background/index.ts).
+3. Loosen the X-specific formats: the author-handle check in `allowAuthor`, the post-id check in the recently-blocked list, and the `x.com` links the popup builds for hidden posts.
+
+Right now the content script loads only the X extractor. Choosing an extractor by hostname is the next step toward multiple sites; contributions are welcome.
 
 ## Status
 
-This is a private beta. What remains before a public release:
+Quiet Feed runs on X in Chrome and Brave. Jev and the local model have been used in a real browser; the Fastino client has been tested against Fastino's live API but not yet in daily browsing. Before a Chrome Web Store release it still needs:
 
-- a labeled evaluation set of 300 to 500 posts, with per-category thresholds tuned on it
-- pinned model versions instead of `jev-latest`
-- a longer check against the live X page (all X selectors live in [src/content/extract.ts](src/content/extract.ts))
-- running the local server as a background service, if starting it by hand becomes a chore
-- confirming in a real browser that the extension's requests reach the local server (verified so far with stubs and direct calls)
+- a labeled evaluation set of 300 to 500 posts, with per-model thresholds tuned on it
+- a pinned Jev model version in place of `jev-latest`
+- site adapters beyond X
+- an option to run the local server as a background service
 
 ## Develop
 
-Requires Node 23 or later.
+You need Node 23 or later.
 
 ```bash
 npm install
@@ -128,49 +150,44 @@ npm install
 npm run build
 ```
 
-If `npm install` is unavailable, this builds `dist/` using only Node's built-in type stripping:
-
-```bash
-npm run build:nodeps
-```
+`npm run build:nodeps` builds `dist/` with Node's built-in type stripping and no installed packages.
 
 ## Tests
 
-Everything runs on Node's built-in test runner, with no installed packages.
+The unit, integration, and browser tests use Node's built-in test runner and no packages.
 
 | Command | What it covers |
 |---|---|
-| `npm test` | Unit and integration tests together |
-| `npm run test:unit` | Pure modules: request building for all three models, response parsing, decisions and refusals, retries, cache, queue, key storage, settings, badge, tally, popup reveal state |
-| `npm run test:integration` | The real service worker against a stubbed `chrome.*` API and stubbed provider endpoints: all three backends, caching, cross-tab deduplication, daily limit, refusals, sender restrictions, per-provider keys, counters, badge, recent list, settings broadcast |
-| `npm run test:browser` | Builds `dist/`, then serves two browser suites: the content script at http://localhost:4173/home and the popup and settings pages at http://localhost:4173/test/browser/pages.html. Open each and read the results at the top |
-| `npm run test:local-server` | The Python server: validation, the request limits the extension relies on, security checks, exactly one response per request, the command line, and real HTTP round trips with a stand-in model (needs `local-server/.venv`) |
-| `npm run test:mutation` | Mutation testing of the TypeScript and Python code; fails below 80%. `-- --suite js` or `-- --suite python` runs one language |
+| `npm test` | Unit and integration tests |
+| `npm run test:unit` | Request building for all three models, response parsing, decisions and refusals, retries, cache, queue, key storage, settings, badge, tally, and popup state |
+| `npm run test:integration` | The real background worker against a stubbed `chrome.*` API and stubbed model endpoints, plus a build into a temporary folder that loads the built worker |
+| `npm run test:browser` | Builds `dist/` and serves two suites: the content script at http://localhost:4173/home, and the popup and settings pages at http://localhost:4173/test/browser/pages.html |
+| `npm run test:local-server` | The Python server: validation, the request limits the extension relies on, security checks, one response per request, the command line, and real HTTP round trips with a stand-in model (needs `local-server/.venv`) |
+| `npm run test:mutation` | Mutation testing of the TypeScript and Python code; fails below 80% (`-- --suite js` or `-- --suite python` runs one language) |
 
-The content-script suite loads the built `dist/content.js` into a page with X-shaped markup and a scripted `chrome.runtime`. If the page is hidden, it substitutes timer-based `requestAnimationFrame` and `IntersectionObserver` and says so in the report. The pages suite loads the built popup and settings pages in iframes with a scripted `chrome.*`, including an out-of-date service worker and a stopped local server.
+The content-script suite loads the built `dist/content.js` into a page with X-shaped markup and a scripted `chrome.runtime`. When the page is hidden, it swaps in timer-based `requestAnimationFrame` and `IntersectionObserver` and notes it in the report. The pages suite loads the built popup and settings pages with a scripted `chrome.*`, including an out-of-date background worker and a stopped local server.
 
-The integration tests also build the extension into a temporary folder and load the built service worker, so a broken build fails `npm test`.
-
-[scripts/mutation.mjs](scripts/mutation.mjs) is a small mutation tester with no dependencies. It changes one thing at a time in the TypeScript and Python source, reruns that language's tests against each change, and lists any change no test caught. The Python suite needs `local-server/.venv` and permission to open a local port. Lines marked `// mutation-ignore: <reason>` are skipped; that marker is reserved for tunable defaults and equivalent mutants.
+[scripts/mutation.mjs](scripts/mutation.mjs) is a dependency-free mutation tester. It changes one thing at a time in the source, reruns that language's tests, and lists every change no test caught. The Python suite needs `local-server/.venv` and permission to open a local port. A line marked `mutation-ignore: <reason>` is skipped, which is reserved for tunable defaults and changes that cannot alter behavior.
 
 ## Layout
 
 | Path | What it does |
 |---|---|
-| `src/background/gliner.ts` | Fastino GLiNER requests (one question per request), response parsing, refusals |
-| `src/background/jev.ts` | TypeSafe Jev request (state plus Noul questions) and client |
-| `src/background/local.ts` | Local GLiNER2.5-Decide requests, health check, endpoint validation |
-| `local-server/` | The optional local model server (Python, standard library plus `gliner2`) |
-| `src/background/decide.ts` | Overrides, thresholds, refusal handling, and the plain-language explanation |
-| `src/background/index.ts` | Service worker: message router, backend selection, cache, usage, badge |
-| `src/background/cache.ts` | SHA-256 keyed decision cache with expiry; stores no post text |
-| `src/background/queue.ts` | Concurrency limit and in-flight deduplication |
-| `src/background/keystore.ts` | Per-provider API key storage, restricted to trusted extension contexts |
-| `src/content/extract.ts` | X DOM selectors and post extraction |
-| `src/content/index.ts` | Viewport observation, placeholders, restore |
-| `src/popup/`, `src/options/` | Extension UI |
+| `src/content/extract.ts` | X selectors and post extraction (the site adapter) |
+| `src/content/index.ts` | Viewport watching, placeholders, and restoring posts |
+| `src/background/index.ts` | Background worker: messages, model selection, cache, usage, badge |
+| `src/background/jev.ts` | TypeSafe Jev client |
+| `src/background/gliner.ts` | Fastino GLiNER client, including refusals |
+| `src/background/local.ts` | Local model client, health check, and address validation |
+| `src/background/decide.ts` | Overrides, thresholds, refusals, and the plain-language reason |
+| `src/background/cache.ts` | Hash-keyed decision cache with expiry; stores no post text |
+| `src/background/queue.ts` | Concurrency limit and deduplication across tabs |
+| `src/background/keystore.ts` | API key storage limited to the extension's own pages |
+| `src/popup/`, `src/options/` | Popup and settings pages |
+| `local-server/` | The optional local model server (Python standard library plus `gliner2`) |
 | `test/` | Unit, integration, and browser tests |
+| `docs/SPEC.md` | The original product and technical spec |
 
 ## License
 
-MIT; see [LICENSE](LICENSE). The model the local server downloads, `fastino/GLiNER2.5-Decide`, and the `gliner2` library are separately licensed under Apache-2.0.
+MIT; see [LICENSE](LICENSE). The `fastino/GLiNER2.5-Decide` model and the `gliner2` library that the local server downloads are licensed separately under Apache-2.0.
