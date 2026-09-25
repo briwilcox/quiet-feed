@@ -154,25 +154,6 @@ The content-script suite loads the built `dist/content.js` into a page with X-sh
 
 [scripts/mutation.mjs](scripts/mutation.mjs) is a dependency-free mutation tester. It changes one thing at a time in the source, reruns that language's tests, and lists every change no test caught. The Python suite needs `local-server/.venv` and permission to open a local port. A line marked `mutation-ignore: <reason>` is skipped, which is reserved for tunable defaults and changes that cannot alter behavior.
 
-## Layout
-
-| Path | What it does |
-|---|---|
-| `src/content/extract.ts` | X selectors and post extraction (the site adapter) |
-| `src/content/index.ts` | Viewport watching, placeholders, and restoring posts |
-| `src/background/index.ts` | Background worker: messages, model selection, cache, usage, badge |
-| `src/background/jev.ts` | TypeSafe Jev client |
-| `src/background/gliner.ts` | Fastino GLiNER client, including refusals |
-| `src/background/local.ts` | Local model client, health check, and address validation |
-| `src/background/decide.ts` | Overrides, thresholds, refusals, and the plain-language reason |
-| `src/background/cache.ts` | Hash-keyed decision cache with expiry; stores no post text |
-| `src/background/queue.ts` | Concurrency limit and deduplication across tabs |
-| `src/background/keystore.ts` | API key storage limited to the extension's own pages |
-| `src/popup/`, `src/options/` | Popup and settings pages |
-| `local-server/` | The optional local model server (Python standard library plus `gliner2`) |
-| `test/` | Unit, integration, and browser tests |
-| `docs/SPEC.md` | The original product and technical spec |
-
 ## License
 
 MIT; see [LICENSE](LICENSE). The `fastino/GLiNER2.5-Decide` model and the `gliner2` library that the local server downloads are licensed separately under Apache-2.0.
