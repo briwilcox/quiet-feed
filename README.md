@@ -67,7 +67,7 @@ uv venv --python 3.12 .venv
 VIRTUAL_ENV="$PWD/.venv" uv pip install --no-deps --require-hashes -r requirements.lock
 ```
 
-`requirements.lock` pins 45 packages by hash, none newer than 14 days when it was generated. It deliberately overrides `gliner2`'s requirement of `transformers<5` with `transformers==5.17.0`: every 4.x release carries unfixed advisories, including remote code execution through a malicious model config, and only 5.x fixes them. A normal dependency resolve would reject the override, hence `--no-deps`. `requirements.in` and `overrides.txt` regenerate the lock.
+`requirements.lock` pins every package by hash. It overrides `gliner2`'s requirement of `transformers<5` with `transformers==5.17.0`, because the 4.x line has known advisories that only 5.x fixes. A normal dependency resolve would reject the override, hence `--no-deps`. `requirements.in` and `overrides.txt` regenerate the lock.
 
 ### Run
 
