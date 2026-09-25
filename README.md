@@ -6,18 +6,18 @@ Posts are classified by a hosted model using your own API key. You pick the mode
 
 | Model | Provider | Default | Good at | Weak at |
 |---|---|---|---|---|
-| GLiNER2.5 (`fastino/gliner2.5-multi-v1`) | Fastino | Yes | Rage bait, quoted rage bait, custom topics; fast (about 0.5 seconds per question) | Generic "slop" (not offered), topic exceptions |
-| Jev (`jev-latest`) | TypeSafe | No | Long instructions and nuance, including slop | Needs a TypeSafe key |
+| Jev (`jev-latest`) | TypeSafe | Yes | Long instructions and nuance, including slop | Needs a TypeSafe key |
+| GLiNER2.5 (`fastino/gliner2.5-multi-v1`) | Fastino | No | Rage bait, quoted rage bait, custom topics; fast (about 0.5 seconds per question) | Generic "slop" (not offered), topic exceptions; Fastino refuses some hostile posts |
 
 The full product and technical spec is in [docs/SPEC.md](docs/SPEC.md).
 
 ## What it filters
 
-| Filter | GLiNER | Jev |
+| Filter | Jev | GLiNER |
 |---|---|---|
 | Rage bait (the author's own text) | Yes | Yes |
 | Rage bait in a quoted post | Yes | Yes |
-| LLM slop (generic, formulaic filler) | No, see [Model notes](#model-notes) | Yes |
+| LLM slop (generic, formulaic filler) | Yes | No, see [Model notes](#model-notes) |
 | AI video slop, judged from text and labels only | Yes | Yes |
 | Custom topics, with optional exceptions | Yes | Yes |
 
@@ -38,7 +38,7 @@ After pulling new code, rebuild, click the reload icon on the extension's card, 
 ## Set up
 
 1. Open the extension's **Settings**.
-2. Under **Model**, choose GLiNER2.5 (Fastino) or Jev (TypeSafe).
+2. Under **Model**, keep Jev (TypeSafe), the default, or choose GLiNER2.5 (Fastino).
 3. Read **What gets sent, and where**, then check the box to allow it.
 4. Under **API keys**, paste the key for the model you chose and click **Save and test**. Fastino keys start with `fast_sk_`.
 5. Choose **Session only** (you re-enter the key after restarting the browser) or **Remember on this device**.
@@ -63,7 +63,7 @@ These observations come from a small spot check: about 40 posts I wrote by hand,
 - **One question per request.** Asking several questions in one GLiNER request caused cross-talk, and Fastino refused more of those requests. Quiet Feed sends each question as its own request, in parallel. The daily request limit counts each of these calls.
 - **No slop filter on GLiNER.** No wording separated generic slop from normal posts; on live posts the scores ran backwards. Use Jev for slop.
 - **Topic exceptions are unreliable on GLiNER.** An exception competes as a third label. It kept research posts visible, but it also sometimes mistook a price-speculation post for research.
-- **Fastino refuses many hostile posts.** Its usage policy rejected roughly half of the rage-bait examples. A refusal is a strong hint that a post is hostile, so by default a refused post is hidden with the reason "Refused by Fastino". Turn off **Hide posts Fastino refuses to process** to leave them visible instead.
+- **Fastino refuses some hostile posts, unpredictably.** Across all runs, its usage policy rejected 18 of 40 requests about hostile test posts and none about calm ones. The rate swung from 1 in 8 to 6 in 8 depending on the question wording, on which other questions shared the request, and between runs of the identical request. A refusal is a strong hint that a post is hostile, so by default a refused post is hidden with the reason "Refused by Fastino". Turn off **Hide posts Fastino refuses to process** to leave them visible instead.
 - **Model version.** The only GLiNER2.5 model Fastino hosts is `fastino/gliner2.5-multi-v1`. It is probably the multilingual Decide variant, not the English `fastino/GLiNER2.5-Decide`; Fastino has not confirmed this.
 - **Thresholds are placeholders.** Each model has its own table in [src/shared/settings.ts](src/shared/settings.ts), because their scores are not on the same scale.
 

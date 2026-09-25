@@ -421,8 +421,8 @@ async function bootGliner(settings: Partial<Settings> = {}, { key = FAST_KEY as 
   return stub;
 }
 
-test("GLiNER is the default backend and classifies through Fastino with its own key", async () => {
-  assert.equal(DEFAULT_SETTINGS.backend, "gliner");
+test("Jev is the default; GLiNER classifies through Fastino with its own key", async () => {
+  assert.equal(DEFAULT_SETTINGS.backend, "jev");
   const stub = await bootGliner();
   await stub.chrome.storage.session.set({ jevApiKey: KEY });
   const calls = installFetch((body) => fastinoAnswer(body, { tone: 0.97 }));

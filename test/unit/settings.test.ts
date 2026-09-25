@@ -17,7 +17,7 @@ test("defaults are safe: off until the user opts in, session-only key", () => {
   assert.equal(DEFAULT_SETTINGS.disclosureAccepted, false);
   assert.equal(DEFAULT_SETTINGS.keyStorageMode, "session");
   assert.equal(DEFAULT_SETTINGS.concealWhilePending, false);
-  assert.equal(DEFAULT_SETTINGS.backend, "gliner");
+  assert.equal(DEFAULT_SETTINGS.backend, "jev");
   assert.equal(DEFAULT_SETTINGS.hideProviderRefusals, true);
   assert.ok(DEFAULT_SETTINGS.dailyRequestLimit > 0);
 });

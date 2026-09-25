@@ -50,7 +50,7 @@ export const THRESHOLDS: Record<Backend, ThresholdTable> = {
 export const DEFAULT_SETTINGS: Settings = {
   enabled: false,
   disclosureAccepted: false,
-  backend: "gliner",
+  backend: "jev",
   hideProviderRefusals: true,
   filters: { rage_bait: true, llm_slop: true, ai_video_slop: false }, // mutation-ignore: tunable default
   sensitivity: "balanced",
