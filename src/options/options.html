@@ -13,10 +13,10 @@
   <section>
     <h2>Model</h2>
     <label class="row"><span><strong>Jev</strong> by TypeSafe <span class="muted">(default)</span></span><input type="radio" name="backend" value="jev"></label>
-    <label class="row"><span><strong>GLiNER2.5</strong> by Fastino</span><input type="radio" name="backend" value="gliner"></label>
     <label class="row"><span><strong>GLiNER2.5-Decide on this computer</strong> <span class="muted" id="local-model"></span></span><input type="radio" name="backend" value="local"></label>
-    <p class="muted">Both run in the provider's cloud with your own API key. GLiNER is fast and good at rage bait and
-      topics, weak at spotting generic "slop". Jev reads longer instructions and handles nuance better.</p>
+    <label class="row"><span><strong>GLiNER2.5</strong> by Fastino</span><input type="radio" name="backend" value="gliner"></label>
+    <p class="muted">Jev runs in TypeSafe's cloud with your API key. GLiNER2.5-Decide runs on this computer with no key.
+      GLiNER2.5 by Fastino is an early API option that will switch to Decide once Fastino hosts it.</p>
     <label class="row"><span>Hide posts Fastino refuses to process <span class="muted">(its usage policy rejects many hostile posts;
       off = leave them visible)</span></span><input type="checkbox" id="refusals"></label>
   </section>

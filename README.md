@@ -6,21 +6,21 @@ A hidden post collapses into one line, for example "Hidden: Rage bait · Show po
 
 ## Models
 
-You choose which model judges posts:
+You choose which model judges posts. GLiNER2.5-Decide is the GLiNER model Quiet Feed is built for. The Fastino API option exists so the API path is ready when Fastino hosts Decide; until then it uses Fastino's general GLiNER2.5 model, which barely works for this task.
 
 | Model | Where it runs | Default | Strengths | Weaknesses |
 |---|---|---|---|---|
 | Jev (`jev-latest`) by TypeSafe | TypeSafe's API, with your key | Yes | Reads long instructions; handles nuance, including slop | Needs a TypeSafe key |
-| GLiNER2.5 (`fastino/gliner2.5-multi-v1`) by Fastino | Fastino's API, with your key | No | Rage bait, quoted rage bait, and topics, about 0.5 seconds per question | No slop filter; unreliable topic exceptions; Fastino refuses some hostile posts |
-| GLiNER2.5-Decide (`fastino/GLiNER2.5-Decide`) | Your computer, through the optional [local server](#local-model) | No | Rage bait, slop, and topics with no key or cost, and post text stays on your computer; about 0.1 seconds per question on an Apple GPU | You run a Python server; slop also flags some hype and rage posts |
+| GLiNER2.5-Decide (`fastino/GLiNER2.5-Decide`) | Your computer, through the optional [local server](#local-model) | No | Rage bait, slop, and topics with no key or cost; post text stays on your computer | You run a Python server |
+| GLiNER2.5 (`fastino/gliner2.5-multi-v1`) by Fastino | Fastino's API, with your key | No | Scaffolding for GLiNER2.5-Decide on Fastino's API | Barely works today; see [Model notes](#model-notes) |
 
 ## What it filters
 
-| Filter | Jev | GLiNER (Fastino) | GLiNER2.5-Decide (local) |
+| Filter | Jev | GLiNER2.5-Decide (local) | GLiNER2.5 (Fastino API) |
 |---|---|---|---|
 | Rage bait in the author's own text | Yes | Yes | Yes |
 | Rage bait in a quoted post | Yes | Yes | Yes |
-| LLM slop (generic, formulaic filler) | Yes | No, see [Model notes](#model-notes) | Yes |
+| LLM slop (generic, formulaic filler) | Yes | Yes | No |
 | AI video slop, judged from the caption and media labels | Yes | Yes | Yes |
 | Custom topics, with optional exceptions | Yes | Yes | Yes |
 
@@ -41,7 +41,7 @@ After you pull new code and rebuild, click the reload icon on Quiet Feed's card,
 ## Set up
 
 1. Open Quiet Feed's **Settings**.
-2. Under **Model**, keep Jev, pick GLiNER2.5 (Fastino), or pick GLiNER2.5-Decide on this computer. The local option switches only after its server answers.
+2. Under **Model**, keep Jev, pick GLiNER2.5-Decide on this computer, or pick GLiNER2.5 (Fastino). The local option switches only after its server answers.
 3. For Jev or Fastino, read **What gets sent, and where** and check the box, then paste your key under **API keys** and click **Save and test**. Fastino keys start with `fast_sk_`. Choose **Session only** to re-enter the key after each browser restart, or **Remember on this device**.
 4. Add custom topics if you want them, then turn on **Filtering** in the popup.
 
@@ -67,7 +67,7 @@ uv venv --python 3.12 .venv
 VIRTUAL_ENV="$PWD/.venv" uv pip install --no-deps --require-hashes -r requirements.lock
 ```
 
-`requirements.lock` pins every package by hash. It overrides `gliner2`'s requirement of `transformers<5` with `transformers==5.17.0`, because the 4.x line has known advisories that only 5.x fixes. A normal dependency resolve would reject the override, hence `--no-deps`. `requirements.in` and `overrides.txt` regenerate the lock.
+`requirements.lock` pins every package by hash. It overrides `gliner2`'s requirement of `transformers<5` with `transformers==5.17.0`, because the 4.x line has known advisories that only 5.x fixes.
 
 ### Run
 
@@ -101,21 +101,15 @@ When a request fails, the post stays visible.
 
 ## Model notes
 
-These come from a small spot check (about 40 hand-written posts plus some live browsing), and they explain the current design. They are not accuracy figures.
+These come from a small spot check (about 40 hand-written posts plus some live browsing), not an accuracy evaluation.
 
-GLiNER has no free-text prompt: the task name and label names carry the question, so wording matters. Named labels ("rage bait" versus "not rage bait") separated rage bait well on Fastino's model, with an AUC (area under the curve, where 1.0 separates perfectly and 0.5 is chance) of 0.97 to 0.98 on 16 posts. A bare topic name reached 1.00 on 10 posts. Adding a description to a topic label broke topic detection, so Quiet Feed sends topic names without descriptions to GLiNER.
+GLiNER2.5-Decide separated rage bait, slop, and topics cleanly on the spot-check posts and never refuses a request. It needs no API key, and post text stays on your computer.
 
-Asking several questions in one GLiNER pass made the answers bleed into each other, and Fastino refused more of those requests. Quiet Feed asks each question separately; the daily request limit counts every call.
+GLiNER models have no free-text prompt: the task name and label names carry the question, so wording matters. On Fastino's hosted `fastino/gliner2.5-multi-v1`, named labels ("rage bait" versus "not rage bait") separated rage bait with an AUC (area under the curve, where 1.0 separates perfectly and 0.5 is chance) of 0.97 to 0.98 on 16 posts, and a bare topic name reached 1.00 on 10 posts. Adding a description to a topic label broke topic detection on that model, so Quiet Feed sends it topic names only.
 
-On Fastino's model, no wording separated slop from ordinary posts (live scores ran backwards), so the slop filter is off there. Topic exceptions compete as a third label and sometimes misfire: a price-speculation post once passed as "technical research".
+Fastino's API model has no slop filter, and its usage policy refuses many requests about hostile posts. Because a refusal usually means a hostile post, Quiet Feed hides refused posts by default and labels them "Refused by Fastino"; **Hide posts Fastino refuses to process** in Settings turns that off.
 
-Fastino's usage policy rejected 18 of 40 requests about hostile test posts and none about calm ones, with the rate swinging from 1 in 8 to 6 in 8 across wordings and even between identical runs. Because a refusal usually means a hostile post, Quiet Feed hides refused posts by default and labels them "Refused by Fastino". **Hide posts Fastino refuses to process** in Settings turns that off.
-
-The local GLiNER2.5-Decide model separated rage bait, slop (using a one-line description per label), and topics perfectly on the same hand-written posts, and it never refuses. It still does better with one question per pass, which costs about 90 ms per question on an Apple GPU and about 600 ms on a CPU. During live browsing its slop filter also caught hype and rage posts, and a clickbait video post scored 0.78 for rage bait, so its thresholds sit higher than the spot check alone suggested.
-
-Fastino hosts one GLiNER2.5 model, `fastino/gliner2.5-multi-v1`. It is probably the multilingual variant of Decide rather than the English `fastino/GLiNER2.5-Decide`; Fastino has not said.
-
-Thresholds are placeholders, set per model in [src/shared/settings.ts](src/shared/settings.ts) because the models' scores are not on the same scale.
+Thresholds are set per model in [src/shared/settings.ts](src/shared/settings.ts), because the models' scores are not on the same scale.
 
 ## Adding another site
 
@@ -128,15 +122,6 @@ To support a site such as Threads or LinkedIn:
 3. Loosen the X-specific formats: the author-handle check in `allowAuthor`, the post-id check in the recently-blocked list, and the `x.com` links the popup builds for hidden posts.
 
 Right now the content script loads only the X extractor. Choosing an extractor by hostname is the next step toward multiple sites; contributions are welcome.
-
-## Status
-
-Quiet Feed runs on X in Chrome and Brave. Jev and the local model have been used in a real browser; the Fastino client has been tested against Fastino's live API but not yet in daily browsing. Before a Chrome Web Store release it still needs:
-
-- a labeled evaluation set of 300 to 500 posts, with per-model thresholds tuned on it
-- a pinned Jev model version in place of `jev-latest`
-- site adapters beyond X
-- an option to run the local server as a background service
 
 ## Develop
 
