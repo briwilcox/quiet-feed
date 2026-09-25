@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Quiet Feed content tests</title>
+  <style>
+    body { font: 14px/1.4 system-ui, sans-serif; margin: 0; }
+    #report { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #ccc; padding: 8px 12px; z-index: 1; max-height: 40vh; overflow: auto; }
+    #report .pass { color: #1a7f37; } #report .fail { color: #d0312d; white-space: pre-wrap; }
+    article { padding: 8px 12px; border-bottom: 1px solid #eee; }
+    div[role="link"] { border: 1px solid #ddd; margin: 6px 0; padding: 6px; border-radius: 8px; }
+    .spacer { height: 4000px; }
+  </style>
+</head>
+<body>
+  <div id="report">Running…</div>
+  <main id="feed"></main>
+  <div class="spacer"></div>
+  <main id="below"></main>
+  <script src="/test/browser/chrome-stub.js"></script>
+  <script src="/test/browser/content.test.js"></script>
+</body>
+</html>

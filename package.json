@@ -9,7 +9,11 @@
     "watch": "node scripts/build.mjs --watch",
     "build:nodeps": "node scripts/build-nodeps.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test \"test/**/*.test.ts\""
+    "test": "node --test \"test/unit/**/*.test.ts\" \"test/integration/**/*.test.ts\"",
+    "test:unit": "node --test \"test/unit/**/*.test.ts\"",
+    "test:integration": "node --test \"test/integration/**/*.test.ts\"",
+    "test:mutation": "node scripts/mutation.mjs --min 80",
+    "test:browser": "node scripts/build-nodeps.mjs && node scripts/test-server.mjs"
   },
   "devDependencies": {
     "@types/chrome": "0.2.9",

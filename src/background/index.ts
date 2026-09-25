@@ -9,6 +9,7 @@ import type {
   StatusResponse,
   UsageStats,
 } from "../shared/types.ts";
+import { badgeText } from "./badge.ts";
 import { cacheGet, cacheKey, cachePrune, cachePut } from "./cache.ts";
 import { decide, preDecide, visible } from "./decide.ts";
 import { deleteApiKey, getApiKey, restrictStorageAccess, saveApiKey } from "./keystore.ts";
@@ -79,12 +80,6 @@ function addRecentBlocked(p: Omit<BlockedPost, "at">): Promise<void> {
   });
   recentChain = next.catch(() => {});
   return next;
-}
-
-function badgeText(n: number): string {
-  if (n <= 0) return "";
-  if (n < 1000) return String(n);
-  return n < 10000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : `${Math.floor(n / 1000)}k`;
 }
 
 async function updateBadge() {
@@ -159,7 +154,7 @@ async function testConnection(): Promise<ConnectionStatus> {
         state: "Connection test.",
         questions: { ping: { type: "noul", instructions: { question: "Is this text a connection test?" }, criteria: { true: "Yes", false: "No" } } },
       },
-      { maxAttempts: 1 },
+      { maxAttempts: 1 }, // mutation-ignore: 0 and 1 behave identically (one attempt)
     );
     status = { state: "ok", model: r.model, checkedAt: Date.now() };
   } catch (err) {

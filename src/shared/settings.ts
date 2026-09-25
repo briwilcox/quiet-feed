@@ -24,21 +24,21 @@ export const SENSITIVITY_LABELS: Record<Sensitivity, string> = {
  * labeled set (see docs/SPEC.md section 7). Higher threshold = hides less.
  */
 export const THRESHOLDS: Record<Sensitivity, Record<BuiltInFilterId | "topic", number>> = {
-  conservative: { rage_bait: 0.9, llm_slop: 0.92, ai_video_slop: 0.93, topic: 0.88 },
-  balanced: { rage_bait: 0.8, llm_slop: 0.85, ai_video_slop: 0.88, topic: 0.75 },
-  aggressive: { rage_bait: 0.65, llm_slop: 0.72, ai_video_slop: 0.8, topic: 0.6 },
+  conservative: { rage_bait: 0.9, llm_slop: 0.92, ai_video_slop: 0.93, topic: 0.88 }, // mutation-ignore: tunable default
+  balanced: { rage_bait: 0.8, llm_slop: 0.85, ai_video_slop: 0.88, topic: 0.75 }, // mutation-ignore: tunable default
+  aggressive: { rage_bait: 0.65, llm_slop: 0.72, ai_video_slop: 0.8, topic: 0.6 }, // mutation-ignore: tunable default
 };
 
 export const DEFAULT_SETTINGS: Settings = {
   enabled: false,
   disclosureAccepted: false,
-  filters: { rage_bait: true, llm_slop: true, ai_video_slop: false },
+  filters: { rage_bait: true, llm_slop: true, ai_video_slop: false }, // mutation-ignore: tunable default
   sensitivity: "balanced",
   topics: [],
   allowedAuthors: [],
-  dailyRequestLimit: 1000,
+  dailyRequestLimit: 1000, // mutation-ignore: tunable default
   concealWhilePending: false,
-  concealTimeoutMs: 2500,
+  concealTimeoutMs: 2500, // mutation-ignore: tunable default
   keyStorageMode: "session",
 };
 

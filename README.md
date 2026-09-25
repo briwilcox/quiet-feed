@@ -33,15 +33,25 @@ If `npm install` is unavailable, `npm run build:nodeps` builds `dist/` with Node
 
 Then open `chrome://extensions` (or `brave://extensions` in Brave), turn on Developer mode, choose **Load unpacked**, and select `dist/`. Use `npm run watch` to rebuild on change.
 
-```bash
-npm test
-```
+## Tests
 
-```bash
-npm run typecheck
-```
+Everything runs on Node's built-in test runner and type stripping, with no installed packages.
 
-Tests use Node's built-in runner and type stripping, so they need no installed packages.
+| Command | What it covers |
+|---|---|
+| `npm test` | Unit and integration tests together |
+| `npm run test:unit` | Pure modules: request building, decisions, retries, cache, queue, key storage, settings, badge, tally, popup reveal state |
+| `npm run test:integration` | The real service worker against a stubbed `chrome.*` API and a stubbed TypeSafe endpoint: classify pipeline, caching, cross-tab dedupe, daily limit, sender restrictions, key handling, counters, badge, recent list, settings broadcast |
+| `npm run test:browser` | Builds `dist/`, then serves the content-script suite at http://localhost:4173/home. Open it in Chrome; results render at the top of the page |
+| `npm run test:mutation` | Mutation testing (see below); fails under 80% |
+
+### Browser suite
+
+`test/browser/` loads the built `dist/content.js` into a page with X-shaped markup and a scripted `chrome.runtime`. It covers placeholders, extraction (own text, quoted text, media labels, video, truncation, emoji), link cards versus quoted posts, allowed authors, Show post, Always allow, tallying, reused elements, expanded text, late and same-tick results, errors, viewport gating, concealment, turning filtering off, and leaving `/home`. If the page is hidden (a background tab), it substitutes timer-based `requestAnimationFrame` and `IntersectionObserver` and says so in the report.
+
+### Mutation testing
+
+`scripts/mutation.mjs` is a small dependency-free mutation tester. It makes one change at a time to the Node-testable source (comparison and boundary flips, `&&`/`||` swaps, arithmetic, booleans, negations, numbers, a few method swaps), runs the unit and integration suites against each mutant in a scratch copy, and lists survivors. A line marked `// mutation-ignore: <reason>` is skipped; that is reserved for tunable defaults and equivalent mutants. Browser-only code (`src/content/index.ts`, `extract.ts`, popup and settings pages) is covered by the browser suite instead.
 
 ## Layout
 

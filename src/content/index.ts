@@ -1,5 +1,6 @@
 import type { BlockedPost, ContentConfig, Decision, Message } from "../shared/types.ts";
 import { extractPost, isSupportedPage, SEL, signature } from "./extract.ts";
+import { PostTally } from "./tally.ts";
 
 const ATTR_SIG = "data-qf-sig";
 const PLACEHOLDER_CLASS = "qf-placeholder";
@@ -8,21 +9,16 @@ let config: ContentConfig | null = null;
 /** Posts the user chose to show this page session, by status id. */
 const revealed = new Set<string>();
 const concealTimers = new WeakMap<Element, number>();
-/** Per-page tally so re-evaluating a post (scrolling back, settings change) doesn't recount it. */
-const tallied = new Map<string, "checked" | "blocked">();
+const tally = new PostTally();
 
-function tally(statusId: string, blocked: boolean, ruleIds: string[], blockedPost?: Omit<BlockedPost, "at">) {
-  const prev = tallied.get(statusId);
-  const newlyChecked = prev === undefined;
-  const newlyBlocked = blocked && prev !== "blocked";
-  if (!newlyChecked && !newlyBlocked) return;
-  tallied.set(statusId, blocked ? "blocked" : prev ?? "checked");
+function recordResult(statusId: string, blocked: boolean, ruleIds: string[], blockedPost?: Omit<BlockedPost, "at">) {
+  const delta = tally.record(statusId, blocked);
+  if (!delta) return;
   void send({
     type: "recordResult",
-    newlyChecked,
-    newlyBlocked,
+    ...delta,
     ruleIds,
-    ...(newlyBlocked && blockedPost && { blockedPost }),
+    ...(delta.newlyBlocked && blockedPost && { blockedPost }),
   }).catch(() => {});
 }
 
@@ -131,7 +127,7 @@ async function evaluate(article: HTMLElement) {
   const blocked = decision.hide && !revealed.has(post.statusId);
   // Only real verdicts count as checked; errors, limits, and skips do not.
   if (decision.reason === "hidden" || decision.reason === "below_threshold") {
-    tally(post.statusId, blocked, decision.matched.map((m) => m.ruleId), {
+    recordResult(post.statusId, blocked, decision.matched.map((m) => m.ruleId), {
       statusId: post.statusId,
       authorHandle: post.authorHandle,
       snippet: post.text || post.quotedText || post.mediaLabels.join(", "),

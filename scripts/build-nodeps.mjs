@@ -35,9 +35,14 @@ for (const file of walk(SRC)) {
 }
 writeFileSync(join(OUT, "background.js"), 'import "./background/index.js";\n');
 
-// Content scripts cannot be ES modules: inline extract.ts into one classic script.
-const extract = strip(join(SRC, "content/extract.ts")).replace(/^export\s+/gm, "");
-const main = strip(join(SRC, "content/index.ts")).replace(/^import[^;]*;\s*$/gm, "");
-writeFileSync(join(OUT, "content.js"), `(() => {\n${extract}\n${main}\n})();\n`);
+// Content scripts cannot be ES modules: inline the content modules into one
+// classic script. They import only types and each other, never shared runtime code.
+const dropImports = (code) => code.replace(/^import[^;]*;\s*$/gm, "");
+const helpers = readdirSync(join(SRC, "content"))
+  .filter((f) => f.endsWith(".ts") && f !== "index.ts")
+  .sort()
+  .map((f) => dropImports(strip(join(SRC, "content", f))).replace(/^export\s+/gm, ""));
+const main = dropImports(strip(join(SRC, "content/index.ts")));
+writeFileSync(join(OUT, "content.js"), `(() => {\n${helpers.join("\n")}\n${main}\n})();\n`);
 
 console.log("Built dist/ without dependencies");

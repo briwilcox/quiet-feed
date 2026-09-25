@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { QueueFullError, RequestQueue } from "../src/background/queue.ts";
+import { QueueFullError, RequestQueue } from "../../src/background/queue.ts";
 
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
@@ -32,4 +32,29 @@ test("rejects when the waiting list is full", async () => {
   const p2 = q.run("b", tick);
   await assert.rejects(q.run("c", tick), QueueFullError);
   await Promise.all([p1, p2]);
+});
+
+test("a failing task frees its slot and its key", async () => {
+  const q = new RequestQueue<number>(1);
+  await assert.rejects(q.run("k", async () => { throw new Error("boom"); }), /boom/);
+  assert.equal(await q.run("k", async () => 3), 3);
+});
+
+test("waiting tasks run in order once a slot frees", async () => {
+  const q = new RequestQueue<void>(1);
+  const order: string[] = [];
+  const job = (id: string) => async () => { order.push(id); await tick(); };
+  await Promise.all(["a", "b", "c"].map((id) => q.run(id, job(id))));
+  assert.deepEqual(order, ["a", "b", "c"]);
+});
+
+test("default limits: two concurrent and fifty waiting", async () => {
+  const q = new RequestQueue<void>();
+  let active = 0;
+  let peak = 0;
+  const slow = async () => { active++; peak = Math.max(peak, active); await tick(); active--; };
+  const runs = Array.from({ length: 52 }, (_, i) => q.run(String(i), slow));
+  await assert.rejects(q.run("overflow", slow), QueueFullError);
+  await Promise.all(runs);
+  assert.equal(peak, 2);
 });

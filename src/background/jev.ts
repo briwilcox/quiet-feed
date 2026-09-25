@@ -182,11 +182,12 @@ export class JevError extends Error {
 }
 
 const RETRYABLE = new Set([429, 500, 502, 503, 529]);
+const DEFAULT_BASE_DELAY_MS = 500; // mutation-ignore: timing only, not observable in tests
 
 export async function callJev(
   apiKey: string,
   body: JevRequest,
-  { maxAttempts = 3, baseDelayMs = 500, fetchImpl = fetch } = {},
+  { maxAttempts = 3, baseDelayMs = DEFAULT_BASE_DELAY_MS, fetchImpl = fetch, sleepImpl = sleep } = {},
 ): Promise<JevResponse> {
   for (let attempt = 1; ; attempt++) {
     let res: Response;
@@ -198,13 +199,13 @@ export async function callJev(
       });
     } catch {
       if (attempt >= maxAttempts) throw new JevError("Network error reaching TypeSafe", null);
-      await sleep(backoff(attempt, baseDelayMs));
+      await sleepImpl(backoff(attempt, baseDelayMs));
       continue;
     }
     if (res.ok) return validateResponse(await res.json(), Object.keys(body.questions));
     if (RETRYABLE.has(res.status) && attempt < maxAttempts) {
       const retryAfter = Number(res.headers.get("retry-after"));
-      await sleep(retryAfter > 0 ? retryAfter * 1000 : backoff(attempt, baseDelayMs));
+      await sleepImpl(retryAfter > 0 ? retryAfter * 1000 : backoff(attempt, baseDelayMs));
       continue;
     }
     // Never include the request (it carries the key header) in errors or logs.
@@ -233,7 +234,7 @@ export function validateResponse(raw: unknown, questionIds: string[]): JevRespon
   };
 }
 
-function backoff(attempt: number, base: number): number {
+export function backoff(attempt: number, base: number): number {
   return base * 2 ** (attempt - 1) * (0.75 + Math.random() * 0.5);
 }
 
