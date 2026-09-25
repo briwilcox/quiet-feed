@@ -103,8 +103,8 @@ export interface BlockedPost {
 export type ConnectionStatus =
   | { state: "no_key" }
   | { state: "untested" }
-  | { state: "ok"; model: string; checkedAt: number; device?: string }
-  | { state: "error"; message: string; checkedAt: number };
+  | { state: "ok"; model: string; checkedAt: number; device?: string; provider?: Backend }
+  | { state: "error"; message: string; checkedAt: number; provider?: Backend };
 
 export type Message =
   | { type: "classify"; post: PostPayload }
@@ -133,6 +133,8 @@ export interface ContentConfig {
 }
 
 export interface StatusResponse {
+  /** The service worker's build; compare with the page's BUILD_ID. */
+  buildId: string;
   settings: Settings;
   /** Whether a key is saved for each provider. */
   keys: Record<KeyedBackend, boolean>;

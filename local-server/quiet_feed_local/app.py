@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from contextlib import nullcontext
 from http.server import BaseHTTPRequestHandler
 from typing import Any, Protocol
 
@@ -105,10 +106,7 @@ def classify(model: Classifier, text: str, tasks: dict, lock: threading.Lock | N
     """Run each task in its own pass; the model is not thread-safe, so hold the lock."""
     results = {}
     for name, labels in tasks.items():
-        if lock:
-            with lock:
-                raw = model.classify_text(text, {name: labels}, include_confidence=True)
-        else:
+        with lock or nullcontext():
             raw = model.classify_text(text, {name: labels}, include_confidence=True)
         results[name] = check_result(raw.get(name), labels)
     return results
@@ -178,7 +176,7 @@ def make_handler(
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
-                length = -1
+                length = 0  # not a number: treated like a missing length
             if length <= 0 or length > MAX_BODY_BYTES:
                 self._send(413, {"error": f"body must be 1 to {MAX_BODY_BYTES} bytes"})
                 return
@@ -192,9 +190,9 @@ def make_handler(
                 results = classify(model, text, tasks, lock)
             except Exception:  # noqa: BLE001 - report failure without echoing post text
                 self._send(500, {"error": "classification failed"})
-                return
-            elapsed_ms = round((time.perf_counter() - started) * 1000)
-            self._send(200, {"model": model_id, "results": results, "elapsed_ms": elapsed_ms})
+            else:
+                elapsed_ms = round((time.perf_counter() - started) * 1000)  # mutation-ignore: *999 is within rounding
+                self._send(200, {"model": model_id, "results": results, "elapsed_ms": elapsed_ms})
 
         def do_OPTIONS(self) -> None:  # noqa: N802
             self._send(405, {"error": "method not allowed"})

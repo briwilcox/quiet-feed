@@ -640,3 +640,28 @@ test("keys cannot be saved or deleted for the local provider", async () => {
     assert.deepEqual(await stub.send({ type, provider: "local", key: "x", mode: "session" }), { ok: false, error: "Unknown provider" }, type);
   }
 });
+
+// ---- build id and provider echo (stale-worker detection) ----
+
+test("status reports the worker's build id", async () => {
+  const stub = await boot();
+  assert.equal((await status(stub)).buildId, "dev");
+});
+
+test("every connection test says which provider it checked", async () => {
+  const stub = await boot({}, { key: KEY });
+  await stub.chrome.storage.session.set({ fastinoApiKey: "fast_sk_x" });
+  installFetch((body) => (body?.messages ? fastinoAnswer(body) : body ? jevAnswer(body, 0.5) : healthy()));
+  for (const provider of ["jev", "gliner", "local"] as const) {
+    const res = await stub.send<{ state: string; provider: string }>({ type: "testConnection", provider });
+    assert.deepEqual([res.result!.state, res.result!.provider], ["ok", provider]);
+  }
+  installFetch(() => new Response("", { status: 500 }));
+  for (const provider of ["jev", "gliner"] as const) {
+    const res = await stub.send<{ state: string; provider: string }>({ type: "testConnection", provider });
+    assert.deepEqual([res.result!.state, res.result!.provider], ["error", provider]);
+  }
+  installFetch(() => { throw new TypeError("refused"); });
+  const local = await stub.send<{ state: string; provider: string }>({ type: "testConnection", provider: "local" });
+  assert.deepEqual([local.result!.state, local.result!.provider], ["error", "local"]);
+});

@@ -22,6 +22,8 @@ const ctx = await esbuild.context({
   target: "chrome120",
   sourcemap: watch ? "inline" : false,
   logLevel: "info",
+  // Stamp this build so pages can tell when the running service worker is older.
+  define: { __QF_BUILD_ID__: JSON.stringify(new Date().toISOString()) },
 });
 
 if (watch) {

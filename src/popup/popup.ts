@@ -1,6 +1,7 @@
 import { BACKEND_LABELS, RULE_LABELS, saveSettings } from "../shared/settings.ts";
 import { RevealState, loadHiddenPref, saveHiddenPref } from "./reveal.ts";
-import { describeModel } from "../shared/format.ts";
+import { BUILD_ID } from "../shared/build.ts";
+import { describeModel, localModelReady, STALE_WORKER_MESSAGE, workerIsStale } from "../shared/format.ts";
 import type { Backend, BlockedPost, BuiltInFilterId, ConnectionStatus, Message, Sensitivity, StatusResponse } from "../shared/types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
@@ -26,7 +27,10 @@ function rows(table: HTMLTableElement, data: Array<[string, string | number]>) {
 }
 
 async function render() {
-  const { settings, hasKey, connection, usage, recentBlocked } = await send<StatusResponse>({ type: "getStatus" });
+  const { settings, hasKey, connection, usage, recentBlocked, buildId } = await send<StatusResponse>({ type: "getStatus" });
+  const stale = workerIsStale(buildId, BUILD_ID);
+  $("#stale").hidden = !stale;
+  $("#stale").textContent = stale ? STALE_WORKER_MESSAGE : "";
   const ready = settings.backend === "local" || (hasKey && settings.disclosureAccepted);
 
   $("#setup").hidden = ready;
@@ -68,12 +72,13 @@ async function render() {
     if (next !== "local") return void saveSettings({ backend: next });
     // Only switch to the local model once its server answers.
     const c = await send<ConnectionStatus>({ type: "testConnection", provider: "local" });
-    if (c.state === "ok") {
+    if (localModelReady(c)) {
       await saveSettings({ backend: "local" });
     } else {
       backend.value = settings.backend;
       $("#notice").hidden = false;
-      $("#notice").textContent = `Local model unavailable: ${c.state === "error" ? c.message : "not connected"}`;
+      $("#notice").textContent =
+        c.state === "ok" ? STALE_WORKER_MESSAGE : `Local model unavailable: ${c.state === "error" ? c.message : "not connected"}`;
     }
   };
 

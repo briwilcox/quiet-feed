@@ -1,6 +1,7 @@
 import { loadSettings, saveSettings } from "../shared/settings.ts";
 import { normalizeEndpoint } from "../background/local.ts";
-import { describeModel } from "../shared/format.ts";
+import { BUILD_ID } from "../shared/build.ts";
+import { describeModel, localModelReady, STALE_WORKER_MESSAGE, workerIsStale } from "../shared/format.ts";
 import type { Backend, ConnectionStatus, CustomTopic, KeyStorageMode, KeyedBackend, Message, StatusResponse } from "../shared/types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
@@ -28,7 +29,10 @@ function showConnection(provider: Backend, c: ConnectionStatus) {
 }
 
 async function render() {
-  const { settings, connections } = await send<StatusResponse>({ type: "getStatus" });
+  const { settings, connections, buildId } = await send<StatusResponse>({ type: "getStatus" });
+  const stale = workerIsStale(buildId, BUILD_ID);
+  $("#stale").hidden = !stale;
+  $("#stale").textContent = stale ? STALE_WORKER_MESSAGE : "";
 
   document.querySelectorAll<HTMLInputElement>('input[name="backend"]').forEach((r) => {
     r.checked = r.value === settings.backend;
@@ -40,9 +44,14 @@ async function render() {
       statusEl("local").textContent = "Checking the local server…";
       const c = await send<ConnectionStatus>({ type: "testConnection", provider: "local" });
       showConnection("local", c);
-      if (c.state === "ok") {
+      if (localModelReady(c)) {
         await saveSettings({ backend: "local" });
       } else {
+        if (c.state === "ok") {
+          // An out-of-date worker answered for a different model.
+          statusEl("local").className = "err";
+          statusEl("local").textContent = STALE_WORKER_MESSAGE;
+        }
         r.checked = false;
         await render(); // restores the previous selection
       }

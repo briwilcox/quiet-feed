@@ -143,13 +143,15 @@ Everything runs on Node's built-in test runner, with no installed packages.
 | `npm test` | Unit and integration tests together |
 | `npm run test:unit` | Pure modules: request building for all three models, response parsing, decisions and refusals, retries, cache, queue, key storage, settings, badge, tally, popup reveal state |
 | `npm run test:integration` | The real service worker against a stubbed `chrome.*` API and stubbed provider endpoints: all three backends, caching, cross-tab deduplication, daily limit, refusals, sender restrictions, per-provider keys, counters, badge, recent list, settings broadcast |
-| `npm run test:browser` | Builds `dist/`, then serves the content-script suite at http://localhost:4173/home; open it in a browser and read the results at the top |
-| `npm run test:mutation` | Mutation testing; fails below 80% |
-| `npm run test:local-server` | The Python server: validation, classification, security checks, and real HTTP round trips with a stand-in model (needs `local-server/.venv`) |
+| `npm run test:browser` | Builds `dist/`, then serves two browser suites: the content script at http://localhost:4173/home and the popup and settings pages at http://localhost:4173/test/browser/pages.html. Open each and read the results at the top |
+| `npm run test:local-server` | The Python server: validation, the request limits the extension relies on, security checks, exactly one response per request, the command line, and real HTTP round trips with a stand-in model (needs `local-server/.venv`) |
+| `npm run test:mutation` | Mutation testing of the TypeScript and Python code; fails below 80%. `-- --suite js` or `-- --suite python` runs one language |
 
-The browser suite loads the built `dist/content.js` into a page with X-shaped markup and a scripted `chrome.runtime`. If the page is hidden, it substitutes timer-based `requestAnimationFrame` and `IntersectionObserver` and says so in the report.
+The content-script suite loads the built `dist/content.js` into a page with X-shaped markup and a scripted `chrome.runtime`. If the page is hidden, it substitutes timer-based `requestAnimationFrame` and `IntersectionObserver` and says so in the report. The pages suite loads the built popup and settings pages in iframes with a scripted `chrome.*`, including an out-of-date service worker and a stopped local server.
 
-[scripts/mutation.mjs](scripts/mutation.mjs) is a small mutation tester with no dependencies. It changes one thing at a time in the Node-testable source, reruns the unit and integration suites against each change, and lists any change no test caught. Lines marked `// mutation-ignore: <reason>` are skipped; that marker is reserved for tunable defaults and equivalent mutants.
+The integration tests also build the extension into a temporary folder and load the built service worker, so a broken build fails `npm test`.
+
+[scripts/mutation.mjs](scripts/mutation.mjs) is a small mutation tester with no dependencies. It changes one thing at a time in the TypeScript and Python source, reruns that language's tests against each change, and lists any change no test caught. The Python suite needs `local-server/.venv` and permission to open a local port. Lines marked `// mutation-ignore: <reason>` are skipped; that marker is reserved for tunable defaults and equivalent mutants.
 
 ## Layout
 

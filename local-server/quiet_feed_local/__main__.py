@@ -36,14 +36,14 @@ def main(argv: list[str] | None = None) -> None:
     from gliner2 import AutoExtractor
 
     device = pick_device(args.device)
-    print(f"Loading {args.model} on {device} (the first run downloads about 2 GB from Hugging Face)…", flush=True)
+    print(f"Loading {args.model} on {device} (the first run downloads about 2 GB from Hugging Face)…", flush=True)  # mutation-ignore: flushing only changes when output appears
     model = AutoExtractor.from_pretrained(args.model)
     model.to(device)
 
     handler = make_handler(model, port=args.port, extension_id=args.extension_id, model_id=args.model, device=device)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), handler)
     server.quiet = args.quiet
-    print(f"Quiet Feed local server ready on http://127.0.0.1:{args.port}", flush=True)
+    print(f"Quiet Feed local server ready on http://127.0.0.1:{args.port}", flush=True)  # mutation-ignore: flushing only changes when output appears
     try:
         server.serve_forever()
     except KeyboardInterrupt:

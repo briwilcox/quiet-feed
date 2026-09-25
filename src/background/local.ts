@@ -7,6 +7,8 @@ import type { RuleMeta } from "./jev.ts";
 // Like hosted GLiNER, the task name and label names carry the question.
 export const LOCAL_PROMPT_VERSION = "local-2026-09-24.1";
 export const DEFAULT_LOCAL_ENDPOINT = "http://127.0.0.1:8765";
+/** The server accepts at most this many tasks per request (local-server/quiet_feed_local/app.py). */
+export const LOCAL_MAX_TASKS = 16;
 const REQUEST_TIMEOUT_MS = 20_000; // mutation-ignore: timing only, not observable in tests
 
 /** Labels are a list, or a map of label to description. */
@@ -81,7 +83,15 @@ export function buildLocalRequest(post: PostPayload, settings: Settings): { body
     add(whole, `topic: ${name}`, { labels, positive: name }, { ruleId: `topic:${topic.id}`, label: `Topic: ${name}`, threshold: thresholds.topic });
   }
 
-  return { body: { items: [...byText].map(([text, tasks]) => ({ text, tasks })) }, rules };
+  // Many custom topics can exceed the server's per-request task limit; split them.
+  const items: LocalItem[] = [];
+  for (const [text, tasks] of byText) {
+    const entries = Object.entries(tasks);
+    for (let i = 0; i < entries.length; i += LOCAL_MAX_TASKS) {
+      items.push({ text, tasks: Object.fromEntries(entries.slice(i, i + LOCAL_MAX_TASKS)) });
+    }
+  }
+  return { body: { items }, rules };
 }
 
 // ---- endpoint ----

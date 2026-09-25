@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   DEFAULT_LOCAL_ENDPOINT,
+  LOCAL_MAX_TASKS,
   LocalError,
   buildLocalRequest,
   callLocal,
@@ -227,4 +228,34 @@ test("the default timeout lets a slow but working server answer", async () => {
   }) as unknown as typeof fetch;
   const r = await callLocal(DEFAULT_LOCAL_ENDPOINT, body, { fetchImpl: slow });
   assert.ok("rage_bait" in r.probabilities);
+});
+
+test("more tasks than the server accepts are split across requests for the same text", () => {
+  assert.equal(LOCAL_MAX_TASKS, 16);
+  const topics = (n: number) => Array.from({ length: n }, (_, i) => topic({ id: `t${i}`, name: `Topic ${i}` }));
+  // rage + slop + 14 topics = 16 tasks: one request.
+  const fits = buildLocalRequest(post(), settings({ topics: topics(14) })).body.items;
+  assert.deepEqual(fits.map((i) => Object.keys(i.tasks).length), [16]);
+  // rage + slop + 15 topics = 17 tasks: two requests, nothing lost, same text.
+  const { body, rules } = buildLocalRequest(post(), settings({ topics: topics(15) }));
+  assert.deepEqual(body.items.map((i) => Object.keys(i.tasks).length), [16, 1]);
+  assert.ok(body.items.every((i) => i.text === "my own words"));
+  const ruleIds = body.items.flatMap((i) => Object.values(i.tasks).map((t) => t.ruleId));
+  assert.deepEqual(ruleIds, rules.map((r) => r.ruleId));
+  // 40 topics: three requests.
+  assert.deepEqual(buildLocalRequest(post(), settings({ topics: topics(40) })).body.items.map((i) => Object.keys(i.tasks).length), [16, 16, 10]);
+});
+
+test("callLocal merges answers from split requests", async () => {
+  const topics = Array.from({ length: 20 }, (_, i) => topic({ id: `t${i}`, name: `Topic ${i}` }));
+  const { body } = buildLocalRequest(post(), settings({ topics }));
+  // Route by task names, since split requests share one text.
+  const routed = (async (url: string, init: RequestInit) => {
+    const sent = JSON.parse(String(init.body));
+    const item = body.items.find((i) => Object.keys(i.tasks).join() === Object.keys(sent.tasks).join())!;
+    return fakeServer({ items: [item] }, { "topic:t19": 0.9 }).impl(url, init);
+  }) as unknown as typeof fetch;
+  const r = await callLocal(DEFAULT_LOCAL_ENDPOINT, body, { fetchImpl: routed });
+  assert.equal(Object.keys(r.probabilities).length, 22);
+  assert.equal(r.probabilities["topic:t19"], 0.9);
 });

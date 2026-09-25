@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>page host</title><link rel="stylesheet" href="/dist/shared/ui.css"></head>
+<body>
+<script type="module">
+  // Loads a real built extension page (popup or options) with the chrome stub the
+  // parent test runner prepared for this frame.
+  const page = new URLSearchParams(location.search).get("page");
+  window.chrome = parent.qfStubFor(window);
+  const html = await (await fetch(`/dist/${page}/${page}.html`)).text();
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("script").forEach((s) => s.remove());
+  document.body.innerHTML = doc.body.innerHTML;
+  await import(`/dist/${page}/${page}.js`);
+  window.qfLoaded = true;
+</script>
+</body>
+</html>

@@ -6,7 +6,7 @@ import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } f
 import { dirname, join, relative } from "node:path";
 
 const SRC = "src";
-const OUT = "dist";
+const OUT = process.env.QF_DIST || "dist"; // tests build into a temporary folder
 rmSync(OUT, { recursive: true, force: true });
 
 function strip(file) {
@@ -34,6 +34,9 @@ for (const file of walk(SRC)) {
   }
 }
 writeFileSync(join(OUT, "background.js"), 'import "./background/index.js";\n');
+// Stamp this build so pages can tell when the running service worker is older.
+const buildId = new Date().toISOString();
+writeFileSync(join(OUT, "shared/build.js"), `export const BUILD_ID = ${JSON.stringify(buildId)};\n`);
 
 // Content scripts cannot be ES modules: inline the content modules into one
 // classic script. They import only types and each other, never shared runtime code.

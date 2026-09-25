@@ -12,6 +12,7 @@ import type {
   StatusResponse,
   UsageStats,
 } from "../shared/types.ts";
+import { BUILD_ID } from "../shared/build.ts";
 import { badgeText } from "./badge.ts";
 import { cacheGet, cacheKey, cachePrune, cachePut } from "./cache.ts";
 import { applyRefusal, decide, preDecide, visible } from "./decide.ts";
@@ -220,9 +221,14 @@ async function testConnection(provider: Backend): Promise<ConnectionStatus> {
     try {
       const { localEndpoint } = await loadSettings();
       const h = await checkHealth(localEndpoint);
-      status = { state: "ok", model: h.model, device: h.device, checkedAt: Date.now() };
+      status = { state: "ok", model: h.model, device: h.device, provider: "local", checkedAt: Date.now() };
     } catch (err) {
-      status = { state: "error", message: err instanceof LocalError ? err.message : "Unknown error", checkedAt: Date.now() };
+      status = {
+        state: "error",
+        message: err instanceof LocalError ? err.message : "Unknown error",
+        provider: "local",
+        checkedAt: Date.now(),
+      };
     }
     await chrome.storage.session.set({ [connectionKey("local")]: status });
     return status;
@@ -251,11 +257,12 @@ async function testConnection(provider: Backend): Promise<ConnectionStatus> {
               { maxAttempts: 1 }, // mutation-ignore: 0 and 1 behave identically (one attempt)
             )
           ).model;
-    status = { state: "ok", model, checkedAt: Date.now() };
+    status = { state: "ok", model, provider, checkedAt: Date.now() };
   } catch (err) {
     status = {
       state: "error",
       message: err instanceof JevError || err instanceof GlinerError ? err.message : "Unknown error",
+      provider,
       checkedAt: Date.now(),
     };
   }
@@ -325,6 +332,7 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
         local: await getConnection("local"),
       };
       return {
+        buildId: BUILD_ID,
         settings,
         keys,
         hasKey: settings.backend === "local" || keys[settings.backend],
