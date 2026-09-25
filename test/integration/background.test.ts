@@ -665,3 +665,32 @@ test("every connection test says which provider it checked", async () => {
   const local = await stub.send<{ state: string; provider: string }>({ type: "testConnection", provider: "local" });
   assert.deepEqual([local.result!.state, local.result!.provider], ["error", "local"]);
 });
+
+test("the daily limit holds when many posts arrive at once", async () => {
+  const stub = await boot({ dailyRequestLimit: 2 });
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const calls = installFetch(async (body) => {
+    await gate;
+    return jevAnswer(body, 0.1);
+  });
+  const pending = Array.from({ length: 5 }, (_, i) => classify(stub, post({ statusId: String(9000 + i), text: `burst post ${i}` })));
+  for (let i = 0; i < 20; i++) await flush();
+  release();
+  const results = await Promise.all(pending);
+  assert.equal(calls.length, 2, "more calls than the daily limit");
+  assert.equal(results.filter((d) => d.reason === "daily_limit").length, 3);
+  const { usage } = await status(stub);
+  assert.equal(usage.requests, 2);
+  assert.equal(usage.errors, 0, "a reached limit is not an error");
+});
+
+test("local mode counts requests but never hits the daily limit", async () => {
+  const stub = await bootLocal({ dailyRequestLimit: 1 });
+  installFetch((body) => localAnswer(body));
+  for (let i = 0; i < 3; i++) {
+    const d = await classify(stub, post({ statusId: String(9100 + i), text: `local post ${i}` }));
+    assert.notEqual(d.reason, "daily_limit");
+  }
+  assert.equal((await status(stub)).usage.requests, 3);
+});

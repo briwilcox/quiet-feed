@@ -2,7 +2,7 @@
   "name": "quiet-feed",
   "version": "0.1.0",
   "private": true,
-  "description": "Chrome extension that filters X timelines with the user's own TypeSafe Jev API key.",
+  "description": "Browser extension that hides rage bait, low-effort filler, and chosen topics from social feeds (X today), using Jev, Fastino GLiNER, or a local GLiNER2.5-Decide model.",
   "license": "MIT",
   "type": "module",
   "scripts": {

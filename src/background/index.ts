@@ -69,6 +69,22 @@ function updateUsage(fn: (u: UsageStats) => void): Promise<void> {
   return next;
 }
 
+/**
+ * Count `calls` against today's requests and report whether they fit under
+ * `limit` (null means no limit). It runs in the same serialized chain as every
+ * other usage update, so posts arriving together cannot all pass one stale check.
+ */
+function reserveRequests(calls: number, limit: number | null): Promise<boolean> {
+  let reserved = false;
+  return updateUsage((u) => {
+    if (limit !== null && u.requests + calls > limit) return;
+    u.requests += calls;
+    reserved = true;
+  }).then(() => reserved);
+}
+
+class DailyLimitReached extends Error {}
+
 // ---- recently blocked (session memory only) + toolbar badge ----
 
 const RECENT_LIMIT = 50;
@@ -184,14 +200,13 @@ async function classify(post: PostPayload): Promise<Decision> {
   const local = settings.backend === "local";
   const apiKey = local ? "" : await getApiKey(settings.backend as KeyedBackend);
   if (!local && !apiKey) return visible("no_key");
-  const usage = await getUsage();
-  if (!local && usage.requests + prepared.calls > settings.dailyRequestLimit) {
-    return visible("daily_limit", "Daily request limit reached.");
-  }
 
   try {
     const res = await queue.run(key, async () => {
-      await updateUsage((u) => void (u.requests += prepared.calls));
+      // Reserved inside the queued task so a post shared by two tabs counts once.
+      if (!(await reserveRequests(prepared.calls, local ? null : settings.dailyRequestLimit))) {
+        throw new DailyLimitReached();
+      }
       const started = performance.now();
       const r = await prepared.run(apiKey as string);
       const latency = Math.round(performance.now() - started);
@@ -207,6 +222,7 @@ async function classify(post: PostPayload): Promise<Decision> {
     await cachePut(key, { probabilities: res.probabilities, model: res.model, refused: res.refused });
     return applyRefusal(decide(prepared.rules, res.probabilities, settings), res.refused, settings);
   } catch (err) {
+    if (err instanceof DailyLimitReached) return visible("daily_limit", "Daily request limit reached.");
     // Any failure leaves the post visible.
     await updateUsage((u) => void u.errors++);
     const message =

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Quiet Feed",
   "version": "0.1.0",
-  "description": "Filter rage bait, low-substance posts, and topics you choose from your X timeline, using your own TypeSafe API key.",
+  "description": "Hide rage bait, low-effort filler, and topics you choose from your X timeline, using Jev, Fastino GLiNER, or a local model.",
   "minimum_chrome_version": "120",
   "permissions": ["storage"],
   "host_permissions": [

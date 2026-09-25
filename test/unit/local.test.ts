@@ -45,7 +45,7 @@ function fakeServer(req: LocalRequest, p: Record<string, number> = {}, status = 
     const results: Record<string, { label: string; confidence: number }> = {};
     for (const [name, t] of Object.entries(item.tasks)) {
       const names = Array.isArray(t.labels) ? t.labels : Object.keys(t.labels);
-      const q = p[t.ruleId] ?? 0.1;
+      const q = p[t.ruleIds[0]] ?? 0.1;
       const negative = names.find((n) => n !== t.positive)!;
       results[name] = q >= 0.5 ? { label: t.positive, confidence: q } : { label: negative, confidence: 1 - q };
     }
@@ -61,15 +61,15 @@ test("own-text questions share one item; the quote and topics get their own text
     ["the quote", ["tone"]],
     ["my own words\n[Quoted post] the quote", ["topic: Crypto prices"]],
   ]);
-  assert.deepEqual(body.items[0].tasks.tone, { labels: RAGE_LABELS, positive: "rage bait", ruleId: "rage_bait" });
-  assert.equal(body.items[1].tasks.tone.ruleId, "rage_bait_quoted");
+  assert.deepEqual(body.items[0].tasks.tone, { labels: RAGE_LABELS, positive: "rage bait", ruleIds: ["rage_bait"] });
+  assert.deepEqual(body.items[1].tasks.tone.ruleIds, ["rage_bait_quoted"]);
   assert.deepEqual(body.items[0].tasks.quality, {
     labels: {
       "generic filler": "template-like motivational or listicle writing with no specifics",
       "specific content": "concrete facts, personal experience, or a real argument, or casual chat",
     },
     positive: "generic filler",
-    ruleId: "llm_slop",
+    ruleIds: ["llm_slop"],
   });
   assert.deepEqual(rules.map((r) => [r.ruleId, r.threshold]), [
     ["rage_bait", 0.8],
@@ -85,14 +85,14 @@ test("without a quote, topics join the own-text item; exceptions compete as a la
   assert.deepEqual(body.items[0].tasks["topic: Crypto prices"], {
     labels: ["Crypto prices", "research", "other topic"],
     positive: "Crypto prices",
-    ruleId: "topic:t",
+    ruleIds: ["topic:t"],
   });
 });
 
 test("video, quote-only, disabled, and empty cases", () => {
   const video = buildLocalRequest(post({ hasVideo: true, mediaLabels: ["AI-generated"] }), settings()).body.items[0];
   assert.equal(video.text, "my own words\n[Media: AI-generated]\n[Video attached]");
-  assert.deepEqual(video.tasks.video, { labels: ["low-value AI-generated video", "other video"], positive: "low-value AI-generated video", ruleId: "ai_video_slop" });
+  assert.deepEqual(video.tasks.video, { labels: ["low-value AI-generated video", "other video"], positive: "low-value AI-generated video", ruleIds: ["ai_video_slop"] });
 
   const quoteOnly = buildLocalRequest(post({ text: " ", quotedText: "q" }), settings());
   assert.deepEqual(quoteOnly.body.items.map((i) => [i.text, Object.keys(i.tasks)]), [["q", ["tone"]]]);
@@ -240,7 +240,7 @@ test("more tasks than the server accepts are split across requests for the same 
   const { body, rules } = buildLocalRequest(post(), settings({ topics: topics(15) }));
   assert.deepEqual(body.items.map((i) => Object.keys(i.tasks).length), [16, 1]);
   assert.ok(body.items.every((i) => i.text === "my own words"));
-  const ruleIds = body.items.flatMap((i) => Object.values(i.tasks).map((t) => t.ruleId));
+  const ruleIds = body.items.flatMap((i) => Object.values(i.tasks).flatMap((t) => t.ruleIds));
   assert.deepEqual(ruleIds, rules.map((r) => r.ruleId));
   // 40 topics: three requests.
   assert.deepEqual(buildLocalRequest(post(), settings({ topics: topics(40) })).body.items.map((i) => Object.keys(i.tasks).length), [16, 16, 10]);
@@ -258,4 +258,18 @@ test("callLocal merges answers from split requests", async () => {
   const r = await callLocal(DEFAULT_LOCAL_ENDPOINT, body, { fetchImpl: routed });
   assert.equal(Object.keys(r.probabilities).length, 22);
   assert.equal(r.probabilities["topic:t19"], 0.9);
+});
+
+test("two topics with the same name share one question and both get its answer", async () => {
+  const s = settings({
+    filters: { rage_bait: false, llm_slop: false, ai_video_slop: false },
+    topics: [topic({ id: "a", name: "Golf" }), topic({ id: "b", name: " Golf " })],
+  });
+  const { body, rules } = buildLocalRequest(post(), s);
+  assert.deepEqual(rules.map((r) => r.ruleId), ["topic:a", "topic:b"]);
+  assert.deepEqual(Object.keys(body.items[0].tasks), ["topic: Golf"]);
+  assert.deepEqual(body.items[0].tasks["topic: Golf"].ruleIds, ["topic:a", "topic:b"]);
+  const { impl } = fakeServer(body, { "topic:a": 0.9 });
+  const r = await callLocal(DEFAULT_LOCAL_ENDPOINT, body, { fetchImpl: impl });
+  assert.deepEqual(r.probabilities, { "topic:a": 0.9, "topic:b": 0.9 });
 });

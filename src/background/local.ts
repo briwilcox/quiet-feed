@@ -19,8 +19,11 @@ export interface LocalTask {
 
 export interface LocalItem {
   text: string;
-  /** Keyed by task name (sent to the model); each maps to one rule. */
-  tasks: Record<string, LocalTask & { ruleId: string }>;
+  /**
+   * Keyed by task name (sent to the model). Rules asking the identical question
+   * (two topics with the same name) share one task, so each task maps to a list.
+   */
+  tasks: Record<string, LocalTask & { ruleIds: string[] }>;
 }
 
 export interface LocalRequest {
@@ -53,7 +56,9 @@ export function buildLocalRequest(post: PostPayload, settings: Settings): { body
   const byText = new Map<string, LocalItem["tasks"]>();
   const add = (text: string, name: string, task: LocalTask, rule: RuleMeta) => {
     const tasks = byText.get(text) ?? {};
-    tasks[name] = { ...task, ruleId: rule.ruleId };
+    const existing = tasks[name];
+    if (existing) existing.ruleIds.push(rule.ruleId);
+    else tasks[name] = { ...task, ruleIds: [rule.ruleId] };
     byText.set(text, tasks);
     rules.push(rule);
   };
@@ -205,7 +210,8 @@ export async function callLocal(endpoint: string, req: LocalRequest, opts: CallO
     result.model = r.model;
     for (const [name, task] of Object.entries(req.items[i].tasks)) {
       const answer = r.results[name];
-      result.probabilities[task.ruleId] = positiveProbability(task, answer?.label, answer?.confidence);
+      const p = positiveProbability(task, answer?.label, answer?.confidence);
+      for (const ruleId of task.ruleIds) result.probabilities[ruleId] = p;
     }
   });
   return result;
