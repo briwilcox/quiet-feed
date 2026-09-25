@@ -23,7 +23,7 @@ test("defaults are safe: off until the user opts in, session-only key", () => {
 });
 
 test("stricter sensitivity never has a lower threshold than a looser one", () => {
-  for (const backend of ["jev", "gliner"] as const) {
+  for (const backend of ["jev", "gliner", "local"] as const) {
     const t = THRESHOLDS[backend];
     for (const rule of Object.keys(t.balanced) as Array<keyof typeof t.balanced>) {
       assert.ok(t.conservative[rule] > t.balanced[rule], `${backend}.${rule}`);

@@ -1,7 +1,8 @@
-import { isSettingsChange, loadSettings, saveSettings, todayKey } from "../shared/settings.ts";
+import { isActive, isSettingsChange, loadSettings, saveSettings, todayKey } from "../shared/settings.ts";
 import type {
   Backend,
   BlockedPost,
+  KeyedBackend,
   ConnectionStatus,
   ContentConfig,
   Decision,
@@ -16,6 +17,7 @@ import { cacheGet, cacheKey, cachePrune, cachePut } from "./cache.ts";
 import { applyRefusal, decide, preDecide, visible } from "./decide.ts";
 import { buildGlinerRequest, callGliner, GLINER_MODEL, GLINER_PROMPT_VERSION, GlinerError } from "./gliner.ts";
 import { deleteApiKey, getApiKey, restrictStorageAccess, saveApiKey } from "./keystore.ts";
+import { buildLocalRequest, callLocal, checkHealth, LOCAL_PROMPT_VERSION, LocalError } from "./local.ts";
 import { buildRequest, callJev, JEV_MODEL, JevError, PROMPT_VERSION, type RuleMeta } from "./jev.ts";
 import { RequestQueue } from "./queue.ts";
 
@@ -96,7 +98,7 @@ function addRecentBlocked(p: Omit<BlockedPost, "at">): Promise<void> {
 
 async function updateBadge() {
   const [settings, usage] = await Promise.all([loadSettings(), getUsage()]);
-  const active = settings.enabled && settings.disclosureAccepted;
+  const active = isActive(settings);
   await chrome.action.setBadgeText({ text: active ? badgeText(usage.blocked) : "" });
   await chrome.action.setTitle({
     title: active ? `Quiet Feed: ${usage.blocked} blocked of ${usage.checked} checked today` : "Quiet Feed (off)",
@@ -106,7 +108,7 @@ async function updateBadge() {
 const connectionKey = (provider: Backend) => `connection:${provider}`;
 
 async function getConnection(provider: Backend): Promise<ConnectionStatus> {
-  if (!(await getApiKey(provider))) return { state: "no_key" };
+  if (provider !== "local" && !(await getApiKey(provider))) return { state: "no_key" };
   const key = connectionKey(provider);
   return ((await chrome.storage.session.get(key))[key] as ConnectionStatus) ?? { state: "untested" };
 }
@@ -123,7 +125,23 @@ interface Prepared {
   run: (apiKey: string) => Promise<ClassifierResult>;
 }
 
-function prepare(post: PostPayload, settings: Settings): Prepared {
+/** The model the local server last reported, so a model swap on the same endpoint gets fresh cache keys. */
+async function localModel(): Promise<string> {
+  const c = await getConnection("local");
+  return c.state === "ok" ? c.model : "";
+}
+
+async function prepare(post: PostPayload, settings: Settings): Promise<Prepared> {
+  if (settings.backend === "local") {
+    const { body, rules } = buildLocalRequest(post, settings);
+    return {
+      rules,
+      body: { endpoint: settings.localEndpoint, model: await localModel(), ...body },
+      promptVersion: LOCAL_PROMPT_VERSION,
+      calls: body.items.length,
+      run: () => callLocal(settings.localEndpoint, body),
+    };
+  }
   if (settings.backend === "jev") {
     const { body, rules } = buildRequest(post, settings);
     return {
@@ -150,7 +168,7 @@ function prepare(post: PostPayload, settings: Settings): Prepared {
 
 async function classify(post: PostPayload): Promise<Decision> {
   const settings = await loadSettings();
-  const prepared = prepare(post, settings);
+  const prepared = await prepare(post, settings);
   const early = preDecide(post, settings, prepared.rules.length > 0);
   if (early) return early;
 
@@ -161,16 +179,20 @@ async function classify(post: PostPayload): Promise<Decision> {
     return applyRefusal(decide(prepared.rules, cached.probabilities, settings), cached.refused === true, settings);
   }
 
-  const apiKey = await getApiKey(settings.backend);
-  if (!apiKey) return visible("no_key");
+  // Local mode needs no key and costs nothing, so the daily limit does not apply.
+  const local = settings.backend === "local";
+  const apiKey = local ? "" : await getApiKey(settings.backend as KeyedBackend);
+  if (!local && !apiKey) return visible("no_key");
   const usage = await getUsage();
-  if (usage.requests + prepared.calls > settings.dailyRequestLimit) return visible("daily_limit", "Daily request limit reached.");
+  if (!local && usage.requests + prepared.calls > settings.dailyRequestLimit) {
+    return visible("daily_limit", "Daily request limit reached.");
+  }
 
   try {
     const res = await queue.run(key, async () => {
       await updateUsage((u) => void (u.requests += prepared.calls));
       const started = performance.now();
-      const r = await prepared.run(apiKey);
+      const r = await prepared.run(apiKey as string);
       const latency = Math.round(performance.now() - started);
       await updateUsage((u) => {
         u.inputTokens += r.usage.input_tokens;
@@ -186,12 +208,25 @@ async function classify(post: PostPayload): Promise<Decision> {
   } catch (err) {
     // Any failure leaves the post visible.
     await updateUsage((u) => void u.errors++);
-    const message = err instanceof JevError || err instanceof GlinerError ? err.message : "Classification failed";
+    const message =
+      err instanceof JevError || err instanceof GlinerError || err instanceof LocalError ? err.message : "Classification failed";
     return visible("api_error", message);
   }
 }
 
 async function testConnection(provider: Backend): Promise<ConnectionStatus> {
+  if (provider === "local") {
+    let status: ConnectionStatus;
+    try {
+      const { localEndpoint } = await loadSettings();
+      const h = await checkHealth(localEndpoint);
+      status = { state: "ok", model: h.model, device: h.device, checkedAt: Date.now() };
+    } catch (err) {
+      status = { state: "error", message: err instanceof LocalError ? err.message : "Unknown error", checkedAt: Date.now() };
+    }
+    await chrome.storage.session.set({ [connectionKey("local")]: status });
+    return status;
+  }
   const apiKey = await getApiKey(provider);
   if (!apiKey) return { state: "no_key" };
   let status: ConnectionStatus;
@@ -231,7 +266,7 @@ async function testConnection(provider: Backend): Promise<ConnectionStatus> {
 async function contentConfig(): Promise<ContentConfig> {
   const s = await loadSettings();
   return {
-    active: s.enabled && s.disclosureAccepted,
+    active: isActive(s),
     concealWhilePending: s.concealWhilePending,
     concealTimeoutMs: s.concealTimeoutMs,
     allowedAuthors: s.allowedAuthors,
@@ -247,7 +282,10 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
   // Content scripts run inside x.com; they may only classify and read their own config.
   const fromExtensionPage = sender.url?.startsWith(chrome.runtime.getURL("")) ?? false;
   if (!fromExtensionPage && !CONTENT_MESSAGES.has(msg.type)) throw new Error("Not allowed");
-  if ("provider" in msg && msg.provider !== "jev" && msg.provider !== "gliner") throw new Error("Unknown provider");
+  if ("provider" in msg) {
+    const known = msg.type === "testConnection" ? ["jev", "gliner", "local"] : ["jev", "gliner"];
+    if (!known.includes(msg.provider)) throw new Error("Unknown provider");
+  }
 
   switch (msg.type) {
     case "classify":
@@ -281,11 +319,15 @@ async function handle(msg: Message, sender: chrome.runtime.MessageSender): Promi
         jev: (await getApiKey("jev")) !== null,
         gliner: (await getApiKey("gliner")) !== null,
       };
-      const connections = { jev: await getConnection("jev"), gliner: await getConnection("gliner") };
+      const connections = {
+        jev: await getConnection("jev"),
+        gliner: await getConnection("gliner"),
+        local: await getConnection("local"),
+      };
       return {
         settings,
         keys,
-        hasKey: keys[settings.backend],
+        hasKey: settings.backend === "local" || keys[settings.backend],
         connection: connections[settings.backend],
         connections,
         usage: await getUsage(),

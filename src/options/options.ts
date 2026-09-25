@@ -1,5 +1,7 @@
 import { loadSettings, saveSettings } from "../shared/settings.ts";
-import type { Backend, ConnectionStatus, CustomTopic, KeyStorageMode, Message, StatusResponse } from "../shared/types.ts";
+import { normalizeEndpoint } from "../background/local.ts";
+import { describeModel } from "../shared/format.ts";
+import type { Backend, ConnectionStatus, CustomTopic, KeyStorageMode, KeyedBackend, Message, StatusResponse } from "../shared/types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -10,15 +12,18 @@ async function send<T>(msg: Message): Promise<T> {
 }
 
 const statusEl = (provider: Backend) =>
-  document.querySelector<HTMLElement>(`.key-block[data-provider="${provider}"] [data-role="status"]`)!;
+  provider === "local"
+    ? $("#local-status")
+    : document.querySelector<HTMLElement>(`.key-block[data-provider="${provider}"] [data-role="status"]`)!;
 
 function showConnection(provider: Backend, c: ConnectionStatus) {
   const el = statusEl(provider);
   el.className = c.state === "ok" ? "ok" : c.state === "error" ? "err" : "muted";
   el.textContent =
-    c.state === "ok" ? `Connected. Model: ${c.model}`
+    c.state === "ok" ? `Connected. Model: ${describeModel(c)}`
     : c.state === "error" ? `Connection failed: ${c.message}`
     : c.state === "no_key" ? "No key saved."
+    : provider === "local" ? "Not tested yet."
     : "Key saved, not tested.";
 }
 
@@ -27,8 +32,36 @@ async function render() {
 
   document.querySelectorAll<HTMLInputElement>('input[name="backend"]').forEach((r) => {
     r.checked = r.value === settings.backend;
-    r.onchange = () => r.checked && saveSettings({ backend: r.value as Backend });
+    r.onchange = async () => {
+      if (!r.checked) return;
+      const backend = r.value as Backend;
+      if (backend !== "local") return void saveSettings({ backend });
+      // Only switch to the local model once its server answers.
+      statusEl("local").textContent = "Checking the local server…";
+      const c = await send<ConnectionStatus>({ type: "testConnection", provider: "local" });
+      showConnection("local", c);
+      if (c.state === "ok") {
+        await saveSettings({ backend: "local" });
+      } else {
+        r.checked = false;
+        await render(); // restores the previous selection
+      }
+    };
   });
+  const local = connections.local;
+  $("#local-model").textContent = local.state === "ok" ? `(${describeModel(local)})` : "(server not connected)";
+  const endpoint = $<HTMLInputElement>("#local-endpoint");
+  endpoint.value = settings.localEndpoint;
+  endpoint.onchange = async () => {
+    const normalized = normalizeEndpoint(endpoint.value);
+    if (!normalized) {
+      statusEl("local").className = "err";
+      statusEl("local").textContent = "Use http://127.0.0.1:<port> or http://localhost:<port>.";
+      endpoint.value = settings.localEndpoint;
+      return;
+    }
+    await saveSettings({ localEndpoint: normalized });
+  };
   const refusals = $<HTMLInputElement>("#refusals");
   refusals.checked = settings.hideProviderRefusals;
   refusals.onchange = () => saveSettings({ hideProviderRefusals: refusals.checked });
@@ -42,6 +75,7 @@ async function render() {
     r.checked = r.value === settings.keyStorageMode;
   });
   showConnection("gliner", connections.gliner);
+  showConnection("local", connections.local);
   showConnection("jev", connections.jev);
 
   renderTopics(settings.topics);
@@ -122,7 +156,7 @@ function renderAuthors(authors: string[]) {
 }
 
 document.querySelectorAll<HTMLElement>(".key-block").forEach((block) => {
-  const provider = block.dataset.provider as Backend;
+  const provider = block.dataset.provider as KeyedBackend;
   const input = block.querySelector<HTMLInputElement>("input")!;
   const button = (action: string) => block.querySelector<HTMLButtonElement>(`[data-action="${action}"]`)!;
   const testing = () => (statusEl(provider).textContent = "Testing…");
@@ -146,6 +180,12 @@ document.querySelectorAll<HTMLElement>(".key-block").forEach((block) => {
     if (s.backend === provider) await saveSettings({ enabled: false });
     await render();
   });
+});
+
+$("#local-test").addEventListener("click", async () => {
+  statusEl("local").textContent = "Checking the local server…";
+  showConnection("local", await send<ConnectionStatus>({ type: "testConnection", provider: "local" }));
+  await render();
 });
 
 $("#add-topic").addEventListener("click", async () => {

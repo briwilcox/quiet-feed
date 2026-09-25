@@ -135,7 +135,7 @@ export function installChrome() {
 export function installFetch(handler: (body: any, init: RequestInit) => Response | Promise<Response>) {
   const calls: Array<{ url: string; init: RequestInit; body: any }> = [];
   (globalThis as any).fetch = async (url: string, init: RequestInit) => {
-    const body = JSON.parse(String(init.body));
+    const body = init.body ? JSON.parse(String(init.body)) : null;
     calls.push({ url, init, body });
     return handler(body, init);
   };

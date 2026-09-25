@@ -1,0 +1,19 @@
+[project]
+name = "quiet-feed-local"
+version = "0.1.0"
+description = "Local classification server for the Quiet Feed extension, running fastino/GLiNER2.5-Decide."
+requires-python = ">=3.10"
+license = "Apache-2.0"
+# Install from requirements.lock, not from here: the lock overrides gliner2's
+# `transformers<5` with 5.17.0 to avoid advisories that 4.x never fixed. See README.
+dependencies = ["gliner2[local]==2.0.0", "transformers==5.17.0"]
+
+[project.scripts]
+quiet-feed-local = "quiet_feed_local.__main__:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["quiet_feed_local"]

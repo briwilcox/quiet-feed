@@ -1,6 +1,7 @@
 import { BACKEND_LABELS, RULE_LABELS, saveSettings } from "../shared/settings.ts";
 import { RevealState, loadHiddenPref, saveHiddenPref } from "./reveal.ts";
-import type { Backend, BlockedPost, BuiltInFilterId, Message, Sensitivity, StatusResponse } from "../shared/types.ts";
+import { describeModel } from "../shared/format.ts";
+import type { Backend, BlockedPost, BuiltInFilterId, ConnectionStatus, Message, Sensitivity, StatusResponse } from "../shared/types.ts";
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector<T>(sel)!;
 
@@ -26,7 +27,7 @@ function rows(table: HTMLTableElement, data: Array<[string, string | number]>) {
 
 async function render() {
   const { settings, hasKey, connection, usage, recentBlocked } = await send<StatusResponse>({ type: "getStatus" });
-  const ready = hasKey && settings.disclosureAccepted;
+  const ready = settings.backend === "local" || (hasKey && settings.disclosureAccepted);
 
   $("#setup").hidden = ready;
   const enabled = $<HTMLInputElement>("#enabled");
@@ -61,7 +62,20 @@ async function render() {
 
   const backend = $<HTMLSelectElement>("#backend");
   backend.value = settings.backend;
-  backend.onchange = () => saveSettings({ backend: backend.value as Backend });
+  backend.onchange = async () => {
+    const next = backend.value as Backend;
+    $("#notice").hidden = true;
+    if (next !== "local") return void saveSettings({ backend: next });
+    // Only switch to the local model once its server answers.
+    const c = await send<ConnectionStatus>({ type: "testConnection", provider: "local" });
+    if (c.state === "ok") {
+      await saveSettings({ backend: "local" });
+    } else {
+      backend.value = settings.backend;
+      $("#notice").hidden = false;
+      $("#notice").textContent = `Local model unavailable: ${c.state === "error" ? c.message : "not connected"}`;
+    }
+  };
 
   const sens = $<HTMLSelectElement>("#sensitivity");
   sens.value = settings.sensitivity;
@@ -90,8 +104,8 @@ async function render() {
     connection.state === "ok" ? "ok" : connection.state === "error" ? "err" : "muted";
   conn.textContent = {
     no_key: `No ${BACKEND_LABELS[settings.backend]} API key saved`,
-    untested: "Key saved, not tested",
-    ok: connection.state === "ok" ? `Connected (${connection.model})` : "",
+    untested: settings.backend === "local" ? "Local server not tested yet" : "Key saved, not tested",
+    ok: connection.state === "ok" ? `Connected: ${describeModel(connection)}` : "",
     error: connection.state === "error" ? `Error: ${connection.message}` : "",
   }[connection.state];
 

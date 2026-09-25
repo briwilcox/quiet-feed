@@ -546,3 +546,97 @@ test("the daily limit counts every GLiNER call a post needs", async () => {
   await classify(stub, post({ statusId: "3", text: "third" })); // 1 call fits exactly
   assert.equal((await status(stub)).usage.requests, 3);
 });
+
+// ---- Local GLiNER2.5-Decide backend ----
+
+/** A local server reply for one /v1/classify body: P(positive) by task name, default 0.1. */
+function localAnswer(body: any, pByTask: Record<string, number> = {}) {
+  const results: Record<string, { label: string; confidence: number }> = {};
+  for (const [name, t] of Object.entries(body.tasks) as Array<[string, { labels: string[] | Record<string, string> }]>) {
+    const names = Array.isArray(t.labels) ? t.labels : Object.keys(t.labels);
+    const p = pByTask[name] ?? 0.1;
+    results[name] = p >= 0.5 ? { label: names[0], confidence: p } : { label: names[1], confidence: 1 - p };
+  }
+  return Response.json({ model: "fastino/GLiNER2.5-Decide", results, elapsed_ms: 90 });
+}
+const healthy = () => Response.json({ ok: true, model: "fastino/GLiNER2.5-Decide", device: "mps" });
+
+async function bootLocal(settings: Partial<Settings> = {}) {
+  return boot({ backend: "local", disclosureAccepted: false, ...settings }, { key: null });
+}
+
+test("local mode needs no key, no disclosure, and no daily limit", async () => {
+  const stub = await bootLocal({ dailyRequestLimit: 0 });
+  const calls = installFetch((body) => localAnswer(body, { tone: 0.95 }));
+  const d = await classify(stub);
+  assert.equal(calls[0].url, "http://127.0.0.1:8765/v1/classify");
+  assert.equal(d.hide, true);
+  assert.deepEqual(d.matched.map((m) => m.ruleId), ["rage_bait"]);
+  const s = await status(stub);
+  assert.equal(s.hasKey, true);
+  assert.equal(s.usage.requests, 1);
+  assert.deepEqual((await stub.send<{ active: boolean }>({ type: "getContentConfig" }, X_TAB)).result!.active, true);
+});
+
+test("local mode offers the slop filter", async () => {
+  const stub = await bootLocal();
+  const calls = installFetch((body) => localAnswer(body, { quality: 0.9 }));
+  const d = await classify(stub);
+  assert.ok("quality" in calls[0].body.tasks);
+  assert.deepEqual(d.matched.map((m) => m.label), ["LLM slop"]);
+});
+
+test("a stopped local server leaves posts visible", async () => {
+  const stub = await bootLocal();
+  installFetch(() => { throw new TypeError("fetch failed"); });
+  const d = await classify(stub);
+  assert.deepEqual([d.hide, d.reason], [false, "api_error"]);
+  assert.match(d.explanation, /Local server not reachable/);
+});
+
+test("the local connection test reports model and device, using the saved endpoint", async () => {
+  const stub = await bootLocal({ localEndpoint: "http://localhost:9001" });
+  const calls = installFetch(() => healthy());
+  const res = await stub.send<{ state: string; model: string; device: string }>({ type: "testConnection", provider: "local" });
+  assert.equal(calls[0].url, "http://localhost:9001/v1/health");
+  assert.equal(calls[0].init.method, "GET");
+  assert.deepEqual([res.result!.state, res.result!.model, res.result!.device], ["ok", "fastino/GLiNER2.5-Decide", "mps"]);
+  const s = await status(stub);
+  assert.equal(s.connections.local.state, "ok");
+  assert.equal(s.connection.state, "ok");
+});
+
+test("an unreachable local server fails the connection test", async () => {
+  const stub = await bootLocal();
+  installFetch(() => { throw new TypeError("connection refused"); });
+  const res = await stub.send<{ state: string; message: string }>({ type: "testConnection", provider: "local" });
+  assert.equal(res.result!.state, "error");
+  assert.match(res.result!.message, /not reachable/);
+  assert.equal((await status(stub)).connections.local.state, "error");
+});
+
+test("before any test, local shows untested rather than no key", async () => {
+  const stub = await bootLocal();
+  assert.deepEqual((await status(stub)).connections.local, { state: "untested" });
+});
+
+test("the local model id is part of the cache key", async () => {
+  const stub = await bootLocal();
+  const model = (id: string) => stub.chrome.storage.session.set({ "connection:local": { state: "ok", model: id, device: "mps", checkedAt: 1 } });
+  const calls = installFetch((body) => (body ? localAnswer(body) : healthy()));
+  await model("fastino/GLiNER2.5-Decide");
+  await classify(stub);
+  await model("fastino/GLiNER2.5-Decide");
+  await classify(stub);
+  assert.equal(calls.length, 1, "the same model should hit the cache");
+  await model("fastino/GLiNER2.5-Decide-1B");
+  await classify(stub);
+  assert.equal(calls.length, 2, "a different model must not reuse cached scores");
+});
+
+test("keys cannot be saved or deleted for the local provider", async () => {
+  const stub = await bootLocal();
+  for (const type of ["saveKey", "deleteKey"]) {
+    assert.deepEqual(await stub.send({ type, provider: "local", key: "x", mode: "session" }), { ok: false, error: "Unknown provider" }, type);
+  }
+});

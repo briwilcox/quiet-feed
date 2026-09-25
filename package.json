@@ -13,7 +13,8 @@
     "test:unit": "node --test \"test/unit/**/*.test.ts\"",
     "test:integration": "node --test \"test/integration/**/*.test.ts\"",
     "test:mutation": "node scripts/mutation.mjs --min 80",
-    "test:browser": "node scripts/build-nodeps.mjs && node scripts/test-server.mjs"
+    "test:browser": "node scripts/build-nodeps.mjs && node scripts/test-server.mjs",
+    "test:local-server": "cd local-server && .venv/bin/python -m unittest discover -s tests -t ."
   },
   "devDependencies": {
     "@types/chrome": "0.2.9",

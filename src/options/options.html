@@ -13,10 +13,23 @@
     <h2>Model</h2>
     <label class="row"><span><strong>Jev</strong> by TypeSafe <span class="muted">(default)</span></span><input type="radio" name="backend" value="jev"></label>
     <label class="row"><span><strong>GLiNER2.5</strong> by Fastino</span><input type="radio" name="backend" value="gliner"></label>
+    <label class="row"><span><strong>GLiNER2.5-Decide on this computer</strong> <span class="muted" id="local-model"></span></span><input type="radio" name="backend" value="local"></label>
     <p class="muted">Both run in the provider's cloud with your own API key. GLiNER is fast and good at rage bait and
       topics, weak at spotting generic "slop". Jev reads longer instructions and handles nuance better.</p>
     <label class="row"><span>Hide posts Fastino refuses to process <span class="muted">(its usage policy rejects many hostile posts;
       off = leave them visible)</span></span><input type="checkbox" id="refusals"></label>
+  </section>
+
+  <section>
+    <h2>Local model</h2>
+    <p class="muted">Runs fastino/GLiNER2.5-Decide on this computer; post text never leaves it. Optional: the
+      extension works without it. Quiet Feed switches to it only after the server answers.</p>
+    <label for="local-endpoint">Server address</label>
+    <input type="text" id="local-endpoint" spellcheck="false" placeholder="http://127.0.0.1:8765">
+    <p><button id="local-test">Test local server</button></p>
+    <div class="muted" id="local-status"></div>
+    <p class="muted">Start it with <code>cd local-server &amp;&amp; .venv/bin/python -m quiet_feed_local</code>
+      (setup steps are in the README).</p>
   </section>
 
   <section>
@@ -31,7 +44,8 @@
       The last 50 hidden posts (author, first 280 characters, reason) are kept in memory so you can review them
       in the popup; that list is erased when the browser closes.</p>
     <p class="muted">AI video filtering is based on text and labels only. Quiet Feed cannot see video footage.</p>
-    <label class="row"><span>I understand, and want to allow sending post text to the model I picked</span><input type="checkbox" id="disclosure"></label>
+    <label class="row"><span>I understand, and want to allow sending post text to the model I picked
+      <span class="muted">(not needed for the local model)</span></span><input type="checkbox" id="disclosure"></label>
   </section>
 
   <section>

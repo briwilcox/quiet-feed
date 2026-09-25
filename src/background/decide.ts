@@ -1,4 +1,4 @@
-import { RULE_LABELS, SENSITIVITY_LABELS } from "../shared/settings.ts";
+import { isActive, RULE_LABELS, SENSITIVITY_LABELS } from "../shared/settings.ts";
 import type { Decision, DecisionReason, PostPayload, Settings } from "../shared/types.ts";
 import type { RuleMeta } from "./jev.ts";
 
@@ -11,7 +11,7 @@ export function visible(reason: DecisionReason, explanation = ""): Decision {
  * needs classification. Overrides come first so they always win.
  */
 export function preDecide(post: PostPayload, settings: Settings, hasRules: boolean): Decision | null {
-  if (!settings.enabled || !settings.disclosureAccepted) return visible("disabled");
+  if (!isActive(settings)) return visible("disabled");
   if (settings.allowedAuthors.includes(post.authorHandle.toLowerCase())) {
     return visible("allowed_author", `You always allow @${post.authorHandle}.`);
   }

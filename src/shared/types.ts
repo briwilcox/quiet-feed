@@ -1,8 +1,10 @@
 export type BuiltInFilterId = "rage_bait" | "llm_slop" | "ai_video_slop";
 export type Sensitivity = "conservative" | "balanced" | "aggressive";
 export type KeyStorageMode = "session" | "local";
-/** Which hosted classifier runs: Fastino's GLiNER2.5 or TypeSafe's Jev. */
-export type Backend = "gliner" | "jev";
+/** Which classifier runs: TypeSafe's Jev, Fastino's hosted GLiNER2.5, or GLiNER2.5-Decide on this computer. */
+export type Backend = "jev" | "gliner" | "local";
+/** Backends that need an API key. */
+export type KeyedBackend = "jev" | "gliner";
 
 export interface CustomTopic {
   id: string;
@@ -17,6 +19,8 @@ export interface Settings {
   /** Set once the user has read the privacy disclosure on the settings page. */
   disclosureAccepted: boolean;
   backend: Backend;
+  /** Where the local server listens; only http://127.0.0.1 or http://localhost. */
+  localEndpoint: string;
   /** Hide posts the provider refuses under its usage policy (Fastino refuses many hostile posts). */
   hideProviderRefusals: boolean;
   filters: Record<BuiltInFilterId, boolean>;
@@ -99,15 +103,15 @@ export interface BlockedPost {
 export type ConnectionStatus =
   | { state: "no_key" }
   | { state: "untested" }
-  | { state: "ok"; model: string; checkedAt: number }
+  | { state: "ok"; model: string; checkedAt: number; device?: string }
   | { state: "error"; message: string; checkedAt: number };
 
 export type Message =
   | { type: "classify"; post: PostPayload }
   | { type: "getContentConfig" }
   | { type: "getStatus" }
-  | { type: "saveKey"; provider: Backend; key: string; mode: KeyStorageMode }
-  | { type: "deleteKey"; provider: Backend }
+  | { type: "saveKey"; provider: KeyedBackend; key: string; mode: KeyStorageMode }
+  | { type: "deleteKey"; provider: KeyedBackend }
   | { type: "testConnection"; provider: Backend }
   | { type: "clearCache" }
   | {
@@ -131,7 +135,7 @@ export interface ContentConfig {
 export interface StatusResponse {
   settings: Settings;
   /** Whether a key is saved for each provider. */
-  keys: Record<Backend, boolean>;
+  keys: Record<KeyedBackend, boolean>;
   /** Whether the selected backend has a key. */
   hasKey: boolean;
   /** Connection state of the selected backend. */

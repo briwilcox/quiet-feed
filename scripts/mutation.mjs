@@ -23,9 +23,11 @@ const DEFAULT_TARGETS = [
   "src/background/index.ts",
   "src/background/jev.ts",
   "src/background/keystore.ts",
+  "src/background/local.ts",
   "src/background/queue.ts",
   "src/content/tally.ts",
   "src/popup/reveal.ts",
+  "src/shared/format.ts",
   "src/shared/settings.ts",
 ];
 const TEST_CMD = ["--test", "--test-reporter=dot", "test/unit/**/*.test.ts", "test/integration/**/*.test.ts"];

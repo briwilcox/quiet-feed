@@ -9,7 +9,9 @@
     "https://x.com/*",
     "https://twitter.com/*",
     "https://api.typesafe.ai/*",
-    "https://api.fastino.ai/*"
+    "https://api.fastino.ai/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
   ],
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [
