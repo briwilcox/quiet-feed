@@ -1,0 +1,15 @@
+# Reviewed matches for the author's public-push personal-data check.
+# One regular expression per line, searched case-insensitively against the
+# whole line that holds a match. Keep each pattern as narrow as the code allows.
+
+# Loopback addresses in the local-model server code and its tests
+\b127\.0\.0\.[0-9]+\b
+
+# chrome.storage.local and code identifiers that end in .local
+\b(chrome\.storage|storage|connections|state|sc|thresholds)\.local\b
+
+# The test that a non-loopback address is refused
+checkHealth\("http://10\.0\.0\.5:8765"\)
+
+# Copyright line in LICENSE
+^Copyright \(c\) [0-9]{4} Brian Wilcox$
